@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Dashboard</title>
+    <link rel="stylesheet" href="css/supervisor.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar">
+            <div class="sidebar-header">
+                <h2>Elavil</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li class="active">
+                    <a href="supervisor.html"><i class="fas fa-boxes"></i> <span>Inventory</span></a>
+                </li>
+                <li>
+                    <a href="requests.html"><i class="fas fa-clipboard-list"></i> <span>Requests</span></a>
+                </li>
+                <li>
+                    <a href="return-requests.html"><i class="fas fa-undo"></i> <span>Return Requests</span></a>
+                </li>
+                <li>
+                    <a href="users.html"><i class="fas fa-users"></i> <span>User Management</span></a>
+                </li>
+                <li>
+                    <a href="buses.html"><i class="fas fa-bus"></i> <span>Buses</span></a>
+                </li>
+                
+            </ul>
+        </nav>
+
+        <div class="main-content">
+            <header>
+                <h1>Inventory Dashboard</h1>
+            </header>
+            
+            <main>
+                <section id="inventory-display">
+                    <h2>Current Inventory</h2>
+                    <div class="inventory-filters">
+                        <input type="text" id="search-items" placeholder="Search items...">
+                        <select id="type-filter">
+                            <option value="all">All Types</option>
+                        </select>
+                        <select id="status-filter">
+                            <option value="all">All</option>
+                            <option value="available">Available</option>
+                            <option value="low_stock">Low Stock</option>
+                            <option value="no_stock">No stock</option>
+                            <option value="under_repair">Under Repair</option>
+                            <option value="returned">Returned</option>
+                            <option value="repaired">Repaired</option>
+                        </select>
+                    </div>
+                    <table id="inventory-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Brand</th>
+                                <th>Manufacturer</th>
+                                <th>Type</th>
+                                <th>Quantity</th>
+                                <th>Unit</th>
+                                <th>Description</th>
+                                <th>Supplier Name</th>
+                                <th>Supplier Number</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-list">
+                            <!-- Inventory items will be populated here by JavaScript -->
+                        </tbody>
+                    </table>
+                </section>
+
+                <section id="inventory-summary">
+                    <h2>Inventory Summary</h2>
+                    <div class="summary-cards">
+                        <div class="summary-card" id="under-repair">
+                            <h3>Items Returned</h3>
+                            <p>0</p>
+                        </div>
+                        <div class="summary-card" id="ready-to-use">
+                            <h3>Items</h3>
+                            <p>0</p>
+                        </div>
+                        <div class="summary-card" id="low-stock">
+                            <h3>Low Stock Items</h3>
+                            <p>0</p>
+                        </div>
+                        <div class="summary-card" id="no-stock">
+                            <h3>Out of Stock</h3>
+                            <p>0</p>
+                        </div>
+                    </div>
+                </section>
+            </main>
+            
+            <footer>
+                <p>&copy; 2025 Elavil Inventory Management System</p>
+            </footer>
+            
+            <!-- Floating Add Inventory Button -->
+            <button id="add-inventory-fab" title="Add Inventory">+</button>
+
+            <!-- Add Inventory Modal -->
+            <div id="add-inventory-modal" class="modal" style="display:none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Add Inventory Item</h2>
+                        <span class="close-modal" id="close-add-inventory">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <form id="add-inventory-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inv-brand">Brand</label>
+                                    <input type="text" id="inv-brand" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="inv-manufacturer">Manufacturer</label>
+                                    <input type="text" id="inv-manufacturer" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inv-type">Type</label>
+                                    <input type="text" id="inv-type" placeholder="e.g., engine oil" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="inv-quantity">Quantity</label>
+                                    <input type="number" id="inv-quantity" min="1" step="1" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="inv-unit">Quantity Unit</label>
+                                    <select id="inv-unit" required>
+                                        <option value="" disabled selected>Select unit</option>
+                                        <option value="pc">pc</option>
+                                        <option value="gal">gal</option>
+                                        <option value="set">set</option>
+                                        <option value="liters">liters</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="inv-description">Description</label>
+                                <input type="text" id="inv-description" placeholder="Short description">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inv-supplier-name">Supplier Name</label>
+                                    <input type="text" id="inv-supplier-name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="inv-supplier-number">Supplier Number</label>
+                                    <input type="tel" id="inv-supplier-number" placeholder="09XXXXXXXXX" inputmode="numeric" pattern="09[0-9]{9}" maxlength="11" title="Must start with 09 and be 11 digits" required>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary">Save</button>
+                                <button type="button" class="secondary" id="cancel-add-inventory">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Adjust Quantity Modal -->
+            <div id="adjust-qty-modal" class="modal" style="display:none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <span class="close-modal" id="close-adjust-qty">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <form id="adjust-qty-form">
+                            <div class="form-group">
+                                <label for="adjust-qty-input">Add Quantity</label>
+                                <input type="number" id="adjust-qty-input" min="1" step="1" required>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary">Confirm</button>
+                                <button type="button" class="secondary" id="cancel-adjust-qty">Cancel</button>
+                            </div>
+                        </form>
+                        <p id="adjust-qty-note" style="margin-top:10px;color:#7f8c8d;"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/supervisor.js"></script>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:420px;">
+            <div class="modal-header">
+                <h2>Confirm Action</h2>
+                <span class="close-modal" id="confirm-close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message" style="margin:0 0 1rem 0;">
+                    Are you sure?
+                </p>
+                <div class="action-buttons" style="justify-content:center; gap:0.75rem; border-top:none; padding-top:0;">
+                    <button id="confirm-yes" class="success-button">Confirm</button>
+                    <button id="confirm-no" class="danger-button">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 

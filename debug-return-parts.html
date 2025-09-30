@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Return Parts - Elavil</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .debug-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .debug-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Debug Return Parts Database</h1>
+        
+        <div class="debug-section">
+            <h3>Test Database Connection</h3>
+            <button onclick="testConnection()">Test Connection</button>
+            <div id="connection-result"></div>
+        </div>
+        
+        <div class="debug-section">
+            <h3>Test ReturnRequests</h3>
+            <button onclick="testReturnRequests()">Load ReturnRequests</button>
+            <div id="return-requests-result"></div>
+        </div>
+        
+        <div class="debug-section">
+            <h3>Test ReturnParts</h3>
+            <button onclick="testReturnParts()">Load ReturnParts</button>
+            <div id="return-parts-result"></div>
+        </div>
+        
+        <div class="debug-section">
+            <h3>Test Specific Request</h3>
+            <input type="text" id="request-id" placeholder="Enter request ID (e.g., RET-2024-20250927195416)" style="width: 300px; padding: 5px;">
+            <button onclick="testSpecificRequest()">Test Specific Request</button>
+            <div id="specific-request-result"></div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script>
+        // Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyB76JC1Rvi44Ke0F9vS5tiiZ4p8IeAh9mw",
+            authDomain: "elavil-43c53.firebaseapp.com",
+            databaseURL: "https://elavil-43c53-default-rtdb.firebaseio.com",
+            projectId: "elavil-43c53",
+            storageBucket: "elavil-43c53.firebasestorage.app",
+            messagingSenderId: "899611486560",
+            appId: "1:899611486560:web:3bd8de3b3720c9f4009605",
+            measurementId: "G-ESX4H859XL"
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        const database = firebase.database();
+        const returnRequestsRef = database.ref('ReturnRequests');
+        const returnPartsRef = database.ref('ReturnParts');
+
+        function testConnection() {
+            const resultDiv = document.getElementById('connection-result');
+            resultDiv.innerHTML = '<p>Testing connection...</p>';
+            
+            database.ref().once('value')
+                .then((snapshot) => {
+                    resultDiv.innerHTML = '<p style="color: green;">✓ Database connection successful!</p>';
+                })
+                .catch((error) => {
+                    resultDiv.innerHTML = `<p style="color: red;">✗ Database connection failed: ${error.message}</p>`;
+                });
+        }
+
+        function testReturnRequests() {
+            const resultDiv = document.getElementById('return-requests-result');
+            resultDiv.innerHTML = '<p>Loading ReturnRequests...</p>';
+            
+            returnRequestsRef.once('value')
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.val();
+                        resultDiv.innerHTML = `
+                            <p style="color: green;">✓ ReturnRequests loaded successfully!</p>
+                            <p>Number of requests: ${Object.keys(data).length}</p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        `;
+                    } else {
+                        resultDiv.innerHTML = '<p style="color: orange;">⚠ No ReturnRequests found</p>';
+                    }
+                })
+                .catch((error) => {
+                    resultDiv.innerHTML = `<p style="color: red;">✗ Error loading ReturnRequests: ${error.message}</p>`;
+                });
+        }
+
+        function testReturnParts() {
+            const resultDiv = document.getElementById('return-parts-result');
+            resultDiv.innerHTML = '<p>Loading ReturnParts...</p>';
+            
+            returnPartsRef.once('value')
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.val();
+                        resultDiv.innerHTML = `
+                            <p style="color: green;">✓ ReturnParts loaded successfully!</p>
+                            <p>Number of request groups: ${Object.keys(data).length}</p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        `;
+                    } else {
+                        resultDiv.innerHTML = '<p style="color: orange;">⚠ No ReturnParts found</p>';
+                    }
+                })
+                .catch((error) => {
+                    resultDiv.innerHTML = `<p style="color: red;">✗ Error loading ReturnParts: ${error.message}</p>`;
+                });
+        }
+
+        function testSpecificRequest() {
+            const requestId = document.getElementById('request-id').value;
+            const resultDiv = document.getElementById('specific-request-result');
+            
+            if (!requestId) {
+                resultDiv.innerHTML = '<p style="color: red;">Please enter a request ID</p>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p>Testing specific request...</p>';
+            
+            returnPartsRef.child(requestId).once('value')
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.val();
+                        const parts = Object.keys(data);
+                        
+                        let itemsList = [];
+                        parts.forEach(partId => {
+                            const partData = data[partId];
+                            if (partData && typeof partData === 'object' && partData.type) {
+                                itemsList.push({
+                                    id: partId,
+                                    type: partData.type || 'Unknown Type',
+                                    partId: partData.partId || partId,
+                                    manufacturer: partData.manufacturer || 'N/A',
+                                    quantity: partData.quantity || 0
+                                });
+                            }
+                        });
+                        
+                        resultDiv.innerHTML = `
+                            <p style="color: green;">✓ Request ${requestId} found!</p>
+                            <p>Number of parts: ${parts.length}</p>
+                            <p>Processed items: ${itemsList.length}</p>
+                            <h4>Raw Data:</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                            <h4>Processed Items:</h4>
+                            <pre>${JSON.stringify(itemsList, null, 2)}</pre>
+                        `;
+                    } else {
+                        resultDiv.innerHTML = `<p style="color: orange;">⚠ Request ${requestId} not found in ReturnParts</p>`;
+                    }
+                })
+                .catch((error) => {
+                    resultDiv.innerHTML = `<p style="color: red;">✗ Error loading request ${requestId}: ${error.message}</p>`;
+                });
+        }
+
+        // Auto-fill the request ID for testing
+        document.getElementById('request-id').value = 'RET-2024-20250927195416';
+    </script>
+</body>
+</html>

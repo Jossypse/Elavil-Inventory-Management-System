@@ -1,0 +1,17 @@
+.buses-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#buses-table th:nth-child(5),
+#buses-table td:nth-child(5) {
+    width: 160px;
+}
+
+@media (max-width: 768px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

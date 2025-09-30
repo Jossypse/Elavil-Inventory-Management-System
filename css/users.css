@@ -1,0 +1,56 @@
+/* User Management specific styles */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+}
+
+.form-actions {
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+}
+
+.form-actions .secondary {
+    background-color: #7f8c8d;
+}
+
+.form-actions .secondary:hover {
+    background-color: #707b7c;
+}
+
+.users-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#users-table th:nth-child(8),
+#users-table td:nth-child(8) {
+    width: 160px;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #7f8c8d;
+    padding: 30px 0;
+    gap: 10px;
+}
+
+.action-btn.danger {
+    color: #e74c3c;
+}
+
+.action-btn.success {
+    color: #27ae60;
+}
+
+@media (max-width: 768px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

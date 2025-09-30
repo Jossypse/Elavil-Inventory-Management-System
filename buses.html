@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buses Management - Elavil</title>
+    <link rel="stylesheet" href="css/supervisor.css">
+    <link rel="stylesheet" href="css/buses.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar">
+            <div class="sidebar-header">
+                <h2>Elavil</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li>
+                    <a href="supervisor.html"><i class="fas fa-boxes"></i> <span>Inventory</span></a>
+                </li>
+                <li>
+                    <a href="requests.html"><i class="fas fa-clipboard-list"></i> <span>Requests</span></a>
+                </li>
+                <li>
+                    <a href="return-requests.html"><i class="fas fa-undo"></i> <span>Return Requests</span></a>
+                </li>
+                <li>
+                    <a href="users.html"><i class="fas fa-users"></i> <span>User Management</span></a>
+                </li>
+                <li class="active">
+                    <a href="buses.html"><i class="fas fa-bus"></i> <span>Buses</span></a>
+                </li>
+                
+            </ul>
+        </nav>
+
+        <div class="main-content">
+            <header>
+                <h1>Buses Management</h1>
+            </header>
+
+            <main>
+                <section id="bus-form-section">
+                    <h2>Create / Edit Bus</h2>
+                    <form id="bus-form">
+                        <input type="hidden" id="bus-id">
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="busNumber">Bus Number</label>
+                                <input type="text" id="busNumber" placeholder="e.g., 1025" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="acquiredDate">Acquired Date</label>
+                                <input type="date" id="acquiredDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="plateNumber">Plate Number (optional)</label>
+                                <input type="text" id="plateNumber" placeholder="ABC-1234">
+                            </div>
+                            <div class="form-group">
+                                <label for="notes">Notes (optional)</label>
+                                <input type="text" id="notes" placeholder="Any additional details">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" id="save-bus"><i class="fas fa-save"></i> Save Bus</button>
+                            <button type="button" id="reset-bus-form" class="secondary"><i class="fas fa-undo"></i> Reset</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section id="buses-list-section">
+                    <div class="buses-header">
+                        <h2>Buses</h2>
+                        <input type="text" id="search-buses" placeholder="Search by number, plate...">
+                    </div>
+                    <div id="buses-empty-state" class="empty-state">
+                        <i class="fas fa-bus fa-3x"></i>
+                        <p>No buses found</p>
+                    </div>
+                    <div id="buses-table-container" style="display: none;">
+                        <table id="buses-table">
+                            <thead>
+                                <tr>
+                                    <th>Bus Number</th>
+                                    <th>Plate Number</th>
+                                    <th>Acquired Date</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="buses-table-body"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </main>
+
+            <footer>
+                <p>&copy; 2025 Elavil Inventory Management System</p>
+            </footer>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/buses.js"></script>
+</body>
+</html>
+

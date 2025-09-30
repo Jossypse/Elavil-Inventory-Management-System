@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requests Management - Elavil</title>
+    <link rel="stylesheet" href="css/supervisor.css">
+    <link rel="stylesheet" href="css/requests.css">
+    <link rel="stylesheet" href="css/notifications.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar">
+            <div class="sidebar-header">
+                <h2>Elavil</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li>
+                    <a href="supervisor.html"><i class="fas fa-boxes"></i> <span>Inventory</span></a>
+                </li>
+                <li class="active">
+                    <a href="requests.html"><i class="fas fa-clipboard-list"></i> <span>Requests</span></a>
+                </li>
+                <li>
+                    <a href="return-requests.html"><i class="fas fa-undo"></i> <span>Return Requests</span></a>
+                </li>
+                <li>
+                    <a href="users.html"><i class="fas fa-users"></i> <span>User Management</span></a>
+                </li>
+                <li>
+                    <a href="buses.html"><i class="fas fa-bus"></i> <span>Buses</span></a>
+                </li>
+                
+            </ul>
+        </nav>
+
+        <div class="main-content">
+            <header>
+                <h1>Requests Management</h1>
+            </header>
+            
+            <main>
+                <section id="requests-filters">
+                    <div class="filter-group">
+                        <input type="text" id="search-requests" placeholder="Search requests...">
+                        <select id="status-filter">
+                            <option value="all">All Status</option>
+                            <option value="ToBeConfirmed">ToBeConfirmed</option>
+                            <option value="ToPickup">ToPickup</option>
+                            <option value="ToWait">NotAvailable</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                        <select id="date-filter">
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="yesterday">Yesterday</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                        </select>
+                    </div>
+                </section>
+
+                <section id="requests-list">
+                    <div class="requests-header">
+                        <h2>Requests</h2>
+                        <div class="requests-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">ToBeConfirmed</span>
+                                <span class="stat-value" id="toBeConfirmed-count">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">ToPickup</span>
+                                <span class="stat-value" id="toPickup-count">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">NotAvailable</span>
+                                <span class="stat-value" id="toWait-count">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Completed</span>
+                                <span class="stat-value" id="completed-count">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="requests-container">
+                        <div id="requests-empty-state" class="empty-state">
+                            <i class="fas fa-clipboard-list fa-3x"></i>
+                            <p>No requests found</p>
+                        </div>
+                        <div id="requests-table-container" style="display: none;">
+                            <table id="requests-table">
+                                <thead>
+                                    <tr>
+                                        <th>Parts Request ID</th>
+                                        <th>Mechanic </th>
+                                        <th>Bus No.</th>
+                                        <th>Date</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="requests-table-body">
+                                    <!-- Requests will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Request Details Modal -->
+                <div id="request-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Request Details</h2>
+                            <span class="close-modal">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <!-- Request Info Section -->
+                            <div class="request-info-section">
+                                <div class="request-info">
+                                    <div class="info-group">
+                                        <label>Parts Request ID:</label>
+                                        <span id="modal-request-id"></span>
+                                    </div>
+                                    <div class="info-group">
+                                        <label>Mechanic ID:</label>
+                                        <span id="modal-mechanic-id"></span>
+                                    </div>
+                                    <div class="info-group">
+                                        <label>Bus ID:</label>
+                                        <span id="modal-bus-id"></span>
+                                    </div>
+                                    <div class="info-group">
+                                        <label>Date:</label>
+                                        <span id="modal-date"></span>
+                                    </div>
+                                    <div class="info-group">
+                                        <label>Status:</label>
+                                        <span id="modal-status"></span>
+                                    </div>
+                                    <div class="info-group">
+                                        <label>Notes:</label>
+                                        <textarea id="modal-notes" rows="3" placeholder="Add any notes here..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Requested Items Section -->
+                            <div class="requested-items-section">
+                                <div id="requested-items-container" class="items-container">
+                                    <!-- Requested items will be populated here -->
+                                </div>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button id="approve-request" class="success-button">ToPickup</button>
+                                <button id="reject-request" class="danger-button">ToWait</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+            
+            <footer>
+                <p>&copy; 2025 Elavil Inventory Management System</p>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/requests.js"></script>
+</body>
+</html> 

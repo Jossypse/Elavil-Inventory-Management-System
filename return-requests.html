@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Return Requests - Elavil</title>
+    <link rel="stylesheet" href="css/supervisor.css">
+    <link rel="stylesheet" href="css/requests.css">
+    <link rel="stylesheet" href="css/notifications.css">
+    <link rel="stylesheet" href="css/return-requests.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar">
+            <div class="sidebar-header">
+                <h2>Elavil</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li>
+                    <a href="supervisor.html"><i class="fas fa-boxes"></i> <span>Inventory</span></a>
+                </li>
+                <li>
+                    <a href="requests.html"><i class="fas fa-clipboard-list"></i> <span>Requests</span></a>
+                </li>
+                <li class="active">
+                    <a href="return-requests.html"><i class="fas fa-undo"></i> <span>Return Requests</span></a>
+                </li>
+                <li>
+                    <a href="users.html"><i class="fas fa-users"></i> <span>User Management</span></a>
+                </li>
+                <li>
+                    <a href="buses.html"><i class="fas fa-bus"></i> <span>Buses</span></a>
+                </li>
+            </ul>
+        </nav>
+
+        <div class="main-content">
+            <header>
+                <h1>Return Requests Management</h1>
+            </header>
+            
+            <main>
+                <section id="return-requests-filters">
+                    <div class="filter-group">
+                        <input type="text" id="search-return-requests" placeholder="Search return requests...">
+                        <select id="status-filter">
+                            <option value="all">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="accepted">Accepted</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                        <select id="date-filter">
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                        </select>
+                    </div>
+                </section>
+
+                <section id="return-requests-list">
+                    <div class="requests-header">
+                        <h2>Return Requests</h2>
+                        <div class="requests-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Pending</span>
+                                <span class="stat-value" id="pending-count">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Accepted</span>
+                                <span class="stat-value" id="accepted-count">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Rejected</span>
+                                <span class="stat-value" id="rejected-count">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="requests-container">
+                        <div id="return-requests-empty-state" class="empty-state">
+                            <i class="fas fa-undo fa-3x"></i>
+                            <p>No return requests found</p>
+                        </div>
+                        <div id="return-requests-table-container" style="display: none;">
+                            <table id="return-requests-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Date</th>
+                                        <th>Bus ID</th>
+                                        <th>Requested By</th>
+                                        <th>Status</th>
+                                        <th>Items Count</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="return-requests-table-body">
+                                    <!-- Return requests will be populated here -->
+                                </tbody>
+                            </table>
+                            
+                            <!-- Pagination -->
+                            <div class="pagination">
+                                <button id="prev-page" disabled>Previous</button>
+                                <span class="pagination-info" id="pagination-info">Page 1 of 1</span>
+                                <button id="next-page" disabled>Next</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Return Request Details Modal -->
+                <div id="return-request-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Return Request Details</h2>
+                            <span class="close-modal">&times;</span>
+                        </div>
+                        <!-- Returned Items Section -->
+                            <div class="returned-items-section">
+                                <h3>Returned Items</h3>
+
+                                <!-- Action buttons at the top -->
+                            <div class="action-buttons" id="return-action-buttons">
+                                <button id="accept-return-request" class="success-button">Accept</button>
+                                <button id="reject-return-request" class="danger-button">Reject</button>
+                            </div>
+
+                                <div id="request-note" class="request-note">
+                                    <!-- Request note will be populated here -->
+                                </div>
+                                <div id="returned-items-container" class="items-container">
+                                    <!-- Returned items will be populated here -->
+                                </div>
+                            </div>
+                    </div>
+                </div>
+            </main>
+            
+            <footer>
+                <p>&copy; 2025 Elavil Inventory Management System</p>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/return-requests.js"></script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - Elavil</title>
+    <link rel="stylesheet" href="css/supervisor.css">
+    <link rel="stylesheet" href="css/users.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar">
+            <div class="sidebar-header">
+                <h2>Elavil</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li>
+                    <a href="supervisor.html"><i class="fas fa-boxes"></i> <span>Inventory</span></a>
+                </li>
+                <li>
+                    <a href="requests.html"><i class="fas fa-clipboard-list"></i> <span>Requests</span></a>
+                </li>
+                <li>
+                    <a href="return-requests.html"><i class="fas fa-undo"></i> <span>Return Requests</span></a>
+                </li>
+                <li class="active">
+                    <a href="users.html"><i class="fas fa-users"></i> <span>User Management</span></a>
+                </li>
+                <li>
+                    <a href="buses.html"><i class="fas fa-bus"></i> <span>Buses</span></a>
+                </li>
+                
+            </ul>
+        </nav>
+
+        <div class="main-content">
+            <header>
+                <h1>User Management</h1>
+            </header>
+
+            <main>
+                <section id="user-form-section">
+                    <h2>Create / Edit User</h2>
+                    <form id="user-form">
+                        <input type="hidden" id="user-id">
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="fullName">Full Name</label>
+                                <input type="text" id="fullName" placeholder="e.g., Juan Dela Cruz" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="username">Username</label>
+                                <input type="text" id="username" placeholder="Unique username" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="password">Password</label>
+                                <input type="password" id="password" placeholder="Set a password" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="contactNumber">Contact Number</label>
+                                <input type="tel" id="contactNumber" placeholder="09XXXXXXXXX" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="address">Address</label>
+                                <input type="text" id="address" placeholder="Street, City, Province" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="age">Age</label>
+                                <input type="number" id="age" min="18" max="80" placeholder="18" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="employeeType">Type of Employee</label>
+                                <select id="employeeType" required>
+                                    <option value="" disabled selected>Select type</option>
+                                    <option value="driver">Driver</option>
+                                    <option value="conductor">Conductor</option>
+                                    <option value="mechanic">Mechanic</option>
+                                    <option value="supervisor">Supervisor</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="assigned-bus-group" style="display: none;">
+                                <label for="assignedBus">Assigned Bus</label>
+                                <select id="assignedBus">
+                                    <option value="" disabled selected>Select bus</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" id="save-user"><i class="fas fa-save"></i> Save User</button>
+                            <button type="button" id="reset-form" class="secondary"><i class="fas fa-undo"></i> Reset</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section id="users-list-section">
+                    <div class="users-header">
+                        <h2>Users</h2>
+                        <input type="text" id="search-users" placeholder="Search by name, username, type...">
+                    </div>
+                    <div id="users-empty-state" class="empty-state">
+                        <i class="fas fa-users fa-3x"></i>
+                        <p>No users found</p>
+                    </div>
+                    <div id="users-table-container" style="display: none;">
+                        <table id="users-table">
+                            <thead>
+                                <tr>
+                                    <th>Full Name</th>
+                                    <th>Username</th>
+                                    <th>Contact</th>
+                                    <th>Address</th>
+                                    <th>Age</th>
+                                    <th>Type</th>
+                                    <th>Level</th>
+                                    <th>Assigned Bus</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-table-body"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </main>
+
+            <footer>
+                <p>&copy; 2025 Elavil Inventory Management System</p>
+            </footer>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/users.js"></script>
+</body>
+</html>
+
