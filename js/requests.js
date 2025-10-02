@@ -838,7 +838,40 @@ function parseRequestDate(request) {
     if (typeof request.approvedDate === 'number') return request.approvedDate;
     if (typeof request.rejectedDate === 'number') return request.rejectedDate;
 
-    // Prefer ISO in request.date if present
+    // PRIORITY: Extract timestamp from partsRequestID first (most accurate)
+    if (request.partsRequestID) {
+        const id = String(request.partsRequestID).trim();
+        
+        // Try to match format: mech-bus-yyyymmddHHMMSS (like 110465-5090-20250930180758)
+        const formatMatch = id.match(/(\d+)-(\d+)-(\d{14})$/);
+        if (formatMatch) {
+            const stamp = formatMatch[3]; // The 14-digit timestamp part
+            const y = parseInt(stamp.slice(0, 4), 10);
+            const mo = parseInt(stamp.slice(4, 6), 10) - 1;
+            const d = parseInt(stamp.slice(6, 8), 10);
+            const hh = parseInt(stamp.slice(8, 10), 10);
+            const mm = parseInt(stamp.slice(10, 12), 10);
+            const ss = parseInt(stamp.slice(12, 14), 10);
+            const d3 = new Date(y, mo, d, hh, mm, ss);
+            if (!isNaN(d3.getTime())) return d3.getTime();
+        }
+        
+        // Fallback: extract any 14-digit sequence anywhere in the ID
+        const idMatch = id.match(/(\d{14})/);
+        if (idMatch) {
+            const stamp = idMatch[1];
+            const y = parseInt(stamp.slice(0, 4), 10);
+            const mo = parseInt(stamp.slice(4, 6), 10) - 1;
+            const d = parseInt(stamp.slice(6, 8), 10);
+            const hh = parseInt(stamp.slice(8, 10), 10);
+            const mm = parseInt(stamp.slice(10, 12), 10);
+            const ss = parseInt(stamp.slice(12, 14), 10);
+            const d3 = new Date(y, mo, d, hh, mm, ss);
+            if (!isNaN(d3.getTime())) return d3.getTime();
+        }
+    }
+
+    // Fallback: Use request.date if partsRequestID parsing failed
     if (request.date) {
         // Try native Date first
         const d1 = new Date(request.date);
@@ -852,24 +885,6 @@ function parseRequestDate(request) {
             const year = parseInt(m[3], 10);
             const d2 = new Date(year, month, day);
             if (!isNaN(d2.getTime())) return d2.getTime();
-        }
-    }
-
-    // Fallback: extract yyyymmddHHMMSS from partsRequestID like mech-bus-yyyymmddHHMMSS
-    if (request.partsRequestID) {
-        const id = String(request.partsRequestID).trim();
-        // Extract last 14-digit sequence anywhere in the ID
-        const idMatch = id.match(/(\d{14})(?!.*\d)/);
-        if (idMatch) {
-            const stamp = idMatch[1];
-            const y = parseInt(stamp.slice(0, 4), 10);
-            const mo = parseInt(stamp.slice(4, 6), 10) - 1;
-            const d = parseInt(stamp.slice(6, 8), 10);
-            const hh = parseInt(stamp.slice(8, 10), 10);
-            const mm = parseInt(stamp.slice(10, 12), 10);
-            const ss = parseInt(stamp.slice(12, 14), 10);
-            const d3 = new Date(y, mo, d, hh, mm, ss);
-            if (!isNaN(d3.getTime())) return d3.getTime();
         }
     }
 
