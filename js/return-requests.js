@@ -182,26 +182,18 @@
     }
 
     function parseReturnDate(request) {
-        // Prefer ISO-like in request.date
-        if (request && request.date) {
-            const d1 = new Date(request.date);
-            if (!isNaN(d1.getTime())) return d1.getTime();
-            // Try dd/mm/yyyy
-            const m = String(request.date).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-            if (m) {
-                const day = parseInt(m[1], 10);
-                const month = parseInt(m[2], 10) - 1;
-                const year = parseInt(m[3], 10);
-                const d2 = new Date(year, month, day);
-                if (!isNaN(d2.getTime())) return d2.getTime();
-            }
-        }
-        // Fallback: extract last 14-digit yyyymmddHHMMSS anywhere in id
+        console.log(`parseReturnDate called for: ${request.id}`);
+        
+        // PRIORITY: Extract timestamp from request.id first (most accurate)
         if (request && request.id) {
             const id = String(request.id).trim();
-            const idMatch = id.match(/(\d{14})(?!.*\d)/);
-            if (idMatch) {
-                const stamp = idMatch[1];
+            console.log(`  Trying request.id: ${id}`);
+            
+            // Try to match format: RET-bus-yyyymmddHHMMSS (like RET-5090-20250930223343)
+            const formatMatch = id.match(/^RET-(\d+)-(\d{14})$/);
+            if (formatMatch) {
+                const stamp = formatMatch[2]; // The 14-digit timestamp part
+                console.log(`  Found RET format match, timestamp: ${stamp}`);
                 const y = parseInt(stamp.slice(0, 4), 10);
                 const mo = parseInt(stamp.slice(4, 6), 10) - 1;
                 const d = parseInt(stamp.slice(6, 8), 10);
@@ -209,9 +201,54 @@
                 const mm = parseInt(stamp.slice(10, 12), 10);
                 const ss = parseInt(stamp.slice(12, 14), 10);
                 const d3 = new Date(y, mo, d, hh, mm, ss);
-                if (!isNaN(d3.getTime())) return d3.getTime();
+                if (!isNaN(d3.getTime())) {
+                    console.log(`  Using request.id (RET format): ${d3.getTime()}, Date: ${d3.toISOString()}`);
+                    return d3.getTime();
+                }
+            }
+            
+            // Fallback: extract any 14-digit sequence anywhere in the ID
+            const idMatch = id.match(/(\d{14})/);
+            if (idMatch) {
+                const stamp = idMatch[1];
+                console.log(`  Found 14-digit match, timestamp: ${stamp}`);
+                const y = parseInt(stamp.slice(0, 4), 10);
+                const mo = parseInt(stamp.slice(4, 6), 10) - 1;
+                const d = parseInt(stamp.slice(6, 8), 10);
+                const hh = parseInt(stamp.slice(8, 10), 10);
+                const mm = parseInt(stamp.slice(10, 12), 10);
+                const ss = parseInt(stamp.slice(12, 14), 10);
+                const d3 = new Date(y, mo, d, hh, mm, ss);
+                if (!isNaN(d3.getTime())) {
+                    console.log(`  Using request.id (14-digit match): ${d3.getTime()}, Date: ${d3.toISOString()}`);
+                    return d3.getTime();
+                }
             }
         }
+        
+        // Fallback: Use request.date if request.id parsing failed
+        if (request && request.date) {
+            console.log(`  Trying request.date: ${request.date}`);
+            const d1 = new Date(request.date);
+            if (!isNaN(d1.getTime())) {
+                console.log(`  Using request.date (native): ${d1.getTime()}`);
+                return d1.getTime();
+            }
+            // Try dd/mm/yyyy
+            const m = String(request.date).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (m) {
+                const day = parseInt(m[1], 10);
+                const month = parseInt(m[2], 10) - 1;
+                const year = parseInt(m[3], 10);
+                const d2 = new Date(year, month, day);
+                if (!isNaN(d2.getTime())) {
+                    console.log(`  Using request.date (dd/mm/yyyy): ${d2.getTime()}`);
+                    return d2.getTime();
+                }
+            }
+        }
+        
+        console.log(`  No date found, returning 0`);
         return 0;
     }
 
@@ -224,11 +261,23 @@
         );
 
         // Sort by parsed date (newest first) with stable fallback by id
+        console.log('Before sorting return requests:');
+        filteredRequests.slice(0, 3).forEach((req, i) => {
+            const parsedDate = parseReturnDate(req);
+            console.log(`${i}: ID=${req.id}, ParsedDate=${parsedDate}, Date=${new Date(parsedDate).toISOString()}`);
+        });
+        
         filteredRequests.sort((a, b) => {
             const tb = parseReturnDate(b);
             const ta = parseReturnDate(a);
             if (tb !== ta) return tb - ta;
             return String(b.id).localeCompare(String(a.id));
+        });
+        
+        console.log('After sorting return requests:');
+        filteredRequests.slice(0, 3).forEach((req, i) => {
+            const parsedDate = parseReturnDate(req);
+            console.log(`${i}: ID=${req.id}, ParsedDate=${parsedDate}, Date=${new Date(parsedDate).toISOString()}`);
         });
 
         // Clamp current page within valid bounds
