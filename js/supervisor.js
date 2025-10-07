@@ -695,7 +695,8 @@ function showConfirm(message) {
 
 // Update inventory summary
 function updateSummary() {
-    let underRepairCount = 0; // Will be used for RET items count
+    let returnedItemsCount = 0; // Count items with -RET suffix (returned items)
+    let underRepairCount = 0; // Count items with -RETR suffix (under repair items)
     let availableCount = 0;
     let lowStockItems = 0;
     let noStockItems = 0;
@@ -718,6 +719,15 @@ function updateSummary() {
         }
     });
 
+    // Count items whose ID ends with -RET (returned items)
+    try {
+        returnedItemsCount = Object.keys(inventoryData)
+            .filter(id => typeof id === 'string' && /-RET(?:-\d+)?$/i.test(id))
+            .length;
+    } catch(e) {
+        returnedItemsCount = 0;
+    }
+
     // Count items whose ID ends with -RETR (under repair items)
     try {
         underRepairCount = Object.keys(inventoryData)
@@ -728,7 +738,7 @@ function updateSummary() {
     }
     
     // Update summary elements
-    underRepairEl.textContent = underRepairCount;
+    underRepairEl.textContent = returnedItemsCount; // This element shows "Items Returned"
     readyToUseEl.textContent = availableCount;
     lowStockEl.textContent = lowStockItems;
     noStockEl.textContent = noStockItems;
