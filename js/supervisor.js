@@ -479,13 +479,13 @@ function filterInventory() {
     const typeValue = typeFilter.value;
     const statusValue = (statusFilterEl && statusFilterEl.value) || 'all';
     
-    // Filter the items based on search and type filter, but exclude RET/RETF variants
+    // Filter the items based on search and type filter, but exclude RET/RETR/RETF variants
     filteredItems = Object.entries(inventoryData)
         .filter(([itemId, item]) => {
             const upperId = String(itemId).toUpperCase();
             
-            // Skip RET/RETF variants - only include base items in main filtering
-            if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId)) {
+            // Skip RET/RETR/RETF variants - only include base items in main filtering
+            if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETR(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId)) {
                 return false;
             }
             
@@ -548,12 +548,35 @@ function createItemRowWithVariants(itemId, item, index, variants = []) {
     // Create variant dropdown if variants exist
     let variantDropdown = '';
     if (variants.length > 0) {
+        // Calculate totals for each status
+        let totalReturned = 0;
+        let totalUnderRepair = 0;
+        let totalRepaired = 0;
+
+        variants.forEach(([variantId, variantItem]) => {
+            const quantity = parseInt(variantItem.quantity || 0);
+            const upperId = String(variantId).toUpperCase();
+            
+            if (/-RETR(?:-\d+)?$/i.test(upperId)) {
+                totalUnderRepair += quantity;
+            } else if (/-RETF(?:-\d+)?$/i.test(upperId)) {
+                totalRepaired += quantity;
+            } else if (/-RET(?:-\d+)?$/i.test(upperId)) {
+                totalReturned += quantity;
+            }
+        });
+
         variantDropdown = `
             <div class="variant-dropdown">
                 <button class="variant-toggle-btn" onclick="toggleVariants('${itemId}')">
                     <i class="fas fa-chevron-down"></i>
-                    <span class="variant-count">${variants.length} ${variants.length !== 1 ? '' : ''}</span>
+                    <span class="variant-count">${variants.length}${variants.length !== 1 ? '' : ''}</span>
                 </button>
+                <div class="variant-content" id="variant-content-${itemId}" style="display: none;">
+                    ${totalRepaired > 0 ? `<div class="variant-item"><span class="variant-status" style="color: #2ecc71;">Repaired</span><span class="variant-quantity">${totalRepaired}</span></div>` : ''}
+                    ${totalUnderRepair > 0 ? `<div class="variant-item"><span class="variant-status" style="color: #e67e22;">Under Repair</span><span class="variant-quantity">${totalUnderRepair}</span></div>` : ''}
+                    ${totalReturned > 0 ? `<div class="variant-item"><span class="variant-status" style="color: #e74c3c;">Returned</span><span class="variant-quantity">${totalReturned}</span></div>` : ''}
+                </div>
             </div>
         `;
     }
@@ -663,72 +686,62 @@ function createItemRow(itemId, item, index, isGrouped = false) {
     return row;
 }
 
-// Build a variant row that appears under the base row. No "No." column value.
-function createVariantRow(baseId, variantId, variantItem) {
-    const row = document.createElement('tr');
-    row.className = 'variant-row';
-    row.setAttribute('data-base-id', baseId);
-    row.setAttribute('data-item-id', variantId);
-
-    const quantity = parseInt(variantItem.quantity || 0);
-    const upperId = String(variantId).toUpperCase();
-    let statusText = '';
-    let statusColor = '';
-    if (/-RETR(?:-\d+)?$/i.test(upperId)) {
-        statusText = 'Under Repair';
-        statusColor = '#e67e22';
-    } else if (/-RETF(?:-\d+)?$/i.test(upperId)) {
-        statusText = 'Repaired';
-        statusColor = '#2ecc71';
-    } else {
-        statusText = 'Returned';
-        statusColor = '#e74c3c';
-    }
-
-    // Build 10 cells matching table structure, with blank No. and slight indent for readability
-    row.innerHTML = `
-        <td data-label="No."></td>
-        <td data-label="Brand" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.brand)}</td>
-        <td data-label="Manufacturer" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.manufacturer)}</td>
-        <td data-label="Type" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.type)}</td>
-        <td data-label="Quantity" class="quantity-cell grouped-item" style="padding-left: 30px;">${quantity}</td>
-        <td data-label="Unit" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.quantityUnit)}</td>
-        <td data-label="Description" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.description)}</td>
-        <td data-label="Supplier Name" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.supplierName)}</td>
-        <td data-label="Supplier Number" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.supplierNumber)}</td>
-        <td data-label="Status" class="grouped-item" style="padding-left: 30px;"><span style="color:${statusColor}; font-weight:600;">${statusText}</span></td>
+// Build a floating variant summary that appears below the dropdown button
+function createFloatingVariantSummary(baseId, variants) {
+    const floatingDiv = document.createElement('div');
+    floatingDiv.className = 'floating-variant-summary';
+    floatingDiv.setAttribute('data-base-id', baseId);
+    floatingDiv.style.cssText = `
+        position: absolute;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        padding: 12px 16px;
+        z-index: 1000;
+        font-size: 14px;
+        min-width: 200px;
+        max-width: 300px;
     `;
 
-    // Double click transitions maintain previous behavior for variants
-    row.addEventListener('dblclick', () => {
-        const id = String(variantId);
-        const upper = id.toUpperCase();
-        if (/-RETF(?:-\d+)?$/i.test(upper)) {
-            return;
-        }
-        if (/-RETR(?:-\d+)?$/i.test(upper)) {
-            showConfirm('Mark this item as Repaired?').then(ok => {
-                if (!ok) return;
-                transitionItemStatus(id, 'RETF').catch(err => {
-                    console.error('Failed to mark repaired:', err);
-                    alert('Failed to mark as Repaired.');
-                });
-            });
-            return;
-        }
-        if (/-RET(?:-\d+)?$/i.test(upper)) {
-            showConfirm('Put this returned item Under Repair?').then(ok => {
-                if (!ok) return;
-                transitionItemStatus(id, 'RETR').catch(err => {
-                    console.error('Failed to move to Under Repair:', err);
-                    alert('Failed to put item Under Repair.');
-                });
-            });
-            return;
+    // Calculate totals for each status
+    let totalReturned = 0;
+    let totalUnderRepair = 0;
+    let totalRepaired = 0;
+
+    variants.forEach(([variantId, variantItem]) => {
+        const quantity = parseInt(variantItem.quantity || 0);
+        const upperId = String(variantId).toUpperCase();
+        
+        if (/-RETR(?:-\d+)?$/i.test(upperId)) {
+            totalUnderRepair += quantity;
+        } else if (/-RETF(?:-\d+)?$/i.test(upperId)) {
+            totalRepaired += quantity;
+        } else if (/-RET(?:-\d+)?$/i.test(upperId)) {
+            totalReturned += quantity;
         }
     });
 
-    return row;
+    // Build summary display
+    const summaryItems = [];
+    if (totalRepaired > 0) {
+        summaryItems.push(`<div style="color: #2ecc71; font-weight: 600; margin: 4px 0;">Repaired: ${totalRepaired}</div>`);
+    }
+    if (totalUnderRepair > 0) {
+        summaryItems.push(`<div style="color: #e67e22; font-weight: 600; margin: 4px 0;">Under Repair: ${totalUnderRepair}</div>`);
+    }
+    if (totalReturned > 0) {
+        summaryItems.push(`<div style="color: #e74c3c; font-weight: 600; margin: 4px 0;">Returned: ${totalReturned}</div>`);
+    }
+
+    const summaryText = summaryItems.length > 0 ? summaryItems.join('') : '<div style="color: #7f8c8d; font-style: italic;">No variants</div>';
+
+    floatingDiv.innerHTML = `
+        <div style="font-weight: 600; margin-bottom: 8px; color: #2c3e50; border-bottom: 1px solid #ecf0f1; padding-bottom: 4px;">Variants Summary</div>
+        ${summaryText}
+    `;
+
+    return floatingDiv;
 }
 
 function createGroupHeader(baseId, items, index) {
@@ -849,12 +862,12 @@ function renderCurrentPage() {
     const variantItems = {};
     
     currentItems.forEach(([itemId, item]) => {
-        // Look for RET/RETF variants of this base item
+        // Look for RET/RETR/RETF variants of this base item
         const variants = [];
         Object.entries(inventoryData).forEach(([variantId, variantItem]) => {
             const upperVariantId = String(variantId).toUpperCase();
-            if (/-RET(?:-\d+)?$/i.test(upperVariantId) || /-RETF(?:-\d+)?$/i.test(upperVariantId)) {
-                const baseId = variantId.replace(/-(RET|RETF)(?:-\d+)?$/i, '');
+            if (/-RET(?:-\d+)?$/i.test(upperVariantId) || /-RETR(?:-\d+)?$/i.test(upperVariantId) || /-RETF(?:-\d+)?$/i.test(upperVariantId)) {
+                const baseId = variantId.replace(/-(RET|RETR|RETF)(?:-\d+)?$/i, '');
                 if (baseId === itemId) {
                     variants.push([variantId, variantItem]);
                 }
@@ -887,44 +900,20 @@ window.toggleVariants = function(itemId) {
     const toggleBtn = document.querySelector(`button[onclick="toggleVariants('${itemId}')"]`);
     if (!toggleBtn) return;
     const icon = toggleBtn.querySelector('i');
-    const baseRow = document.querySelector(`tr[data-item-id="${itemId}"]`);
-    if (!baseRow) return;
+    const variantContent = document.getElementById(`variant-content-${itemId}`);
     
-    // Detect if variants are already inserted
-    const nextSibling = baseRow.nextElementSibling;
-    const alreadyExpanded = nextSibling && nextSibling.classList.contains('variant-row') && nextSibling.getAttribute('data-base-id') === itemId;
+    if (!variantContent) return;
     
-    if (alreadyExpanded) {
-        // Remove all contiguous variant rows for this base item
-        let cursor = nextSibling;
-        while (cursor && cursor.classList.contains('variant-row') && cursor.getAttribute('data-base-id') === itemId) {
-            const toRemove = cursor;
-            cursor = cursor.nextElementSibling;
-            toRemove.remove();
-        }
+    // Toggle the dropdown content visibility
+    if (variantContent.style.display === 'none') {
+        variantContent.style.display = 'block';
+        icon.className = 'fas fa-chevron-up';
+        toggleBtn.classList.add('variant-expanded');
+    } else {
+        variantContent.style.display = 'none';
         icon.className = 'fas fa-chevron-down';
         toggleBtn.classList.remove('variant-expanded');
-        return;
     }
-    
-    // Insert variant rows just below the base row
-    const variants = (window.baseIdToVariants && window.baseIdToVariants[itemId]) || [];
-    if (!variants.length) return;
-    
-    const fragment = document.createDocumentFragment();
-    variants.forEach(([variantId, variantItem]) => {
-        fragment.appendChild(createVariantRow(itemId, variantId, variantItem));
-    });
-    
-    // Insert after base row
-    if (baseRow.nextSibling) {
-        baseRow.parentNode.insertBefore(fragment, baseRow.nextSibling);
-    } else {
-        baseRow.parentNode.appendChild(fragment);
-    }
-    
-    icon.className = 'fas fa-chevron-up';
-    toggleBtn.classList.add('variant-expanded');
 }
 
 // Toggle group visibility - make it globally accessible
@@ -969,7 +958,7 @@ function renderSkeletonRows(tbody, columns, rows) {
 }
 
 function updatePaginationInfo() {
-    // filteredItems now only contains base items (RET/RETF variants are excluded)
+    // filteredItems now only contains base items (RET/RETR/RETF variants are excluded)
     const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
     const pageInfo = document.getElementById('page-info');
     const prevButton = document.getElementById('prev-page');
@@ -1194,12 +1183,12 @@ function updateSummary() {
     let lowStockItems = 0;
     let noStockItems = 0;
     
-    // Only count base items (without RET/RETF suffixes)
+    // Only count base items (without RET/RETR/RETF suffixes)
     Object.entries(inventoryData).forEach(([itemId, item]) => {
         const upperId = String(itemId).toUpperCase();
         
-        // Skip RET/RETF variants - only count base items
-        if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId)) {
+        // Skip RET/RETR/RETF variants - only count base items
+        if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETR(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId)) {
             return;
         }
         

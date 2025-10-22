@@ -901,28 +901,47 @@ section h2 {
     font-weight: 500;
 }
 
+.variant-summary-inline {
+    margin-left: 8px;
+    font-size: 11px;
+    font-weight: 500;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.variant-summary-inline span {
+    padding: 2px 4px;
+    border-radius: 3px;
+    background: rgba(0,0,0,0.05);
+    font-size: 10px;
+    font-weight: 600;
+}
+
 .variant-content {
     position: absolute;
     top: 100%;
-    left: 0;
-    right: 0;
+    left: -100px;
     background: white;
     border: 1px solid #dee2e6;
     border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    z-index: 5;
+    min-width: 180px;
+    width: max-content;
+    max-width: 250px;
+    z-index: 1000;
     margin-top: 2px;
-    max-height: 200px;
-    overflow-y: auto;
 }
 
 .variant-item {
-    padding: 8px 12px;
+    padding: 10px 12px;
     border-bottom: 1px solid #f1f3f4;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 12px;
+    font-size: 13px;
+    min-height: 20px;
+    white-space: nowrap;
 }
 
 .variant-item:last-child {
@@ -937,11 +956,14 @@ section h2 {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-size: 12px;
 }
 
 .variant-quantity {
-    color: #6c757d;
-    font-weight: 500;
+    color: #495057;
+    font-weight: 600;
+    font-size: 13px;
+    margin-left: 8px;
 }
 
 /* Mobile responsive for groups */
