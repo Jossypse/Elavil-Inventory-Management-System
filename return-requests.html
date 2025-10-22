@@ -32,6 +32,9 @@
                 <li>
                     <a href="buses.html"><i class="fas fa-bus"></i> <span>Buses</span></a>
                 </li>
+                <li>
+                    <a href="reports.html"><i class="fas fa-chart-line"></i> <span>Reports</span></a>
+                </li>
             </ul>
         </nav>
 
@@ -84,22 +87,24 @@
                             <p>No return requests found</p>
                         </div>
                         <div id="return-requests-table-container" style="display: none;">
-                            <table id="return-requests-table">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Date</th>
-                                        <th>Bus ID</th>
-                                        <th>Requested By</th>
-                                        <th>Status</th>
-                                        <th>Items Count</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="return-requests-table-body">
-                                    <!-- Return requests will be populated here -->
-                                </tbody>
-                            </table>
+                            <div class="table-container">
+                                <table id="return-requests-table">
+                                    <thead>
+                                        <tr>
+                                            <th>NO.</th>
+                                            <th>Date</th>
+                                            <th>Bus NO.</th>
+                                            <th>Requested By</th>
+                                            <th>Status</th>
+                                            <th>Items Count</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="return-requests-table-body">
+                                        <!-- Return requests will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
                             
                             <!-- Pagination -->
                             <div class="pagination">

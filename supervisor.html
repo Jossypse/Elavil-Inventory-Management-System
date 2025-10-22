@@ -29,6 +29,9 @@
                 <li>
                     <a href="buses.html"><i class="fas fa-bus"></i> <span>Buses</span></a>
                 </li>
+                <li>
+                    <a href="reports.html"><i class="fas fa-chart-line"></i> <span>Reports</span></a>
+                </li>
                 
             </ul>
         </nav>
@@ -40,7 +43,29 @@
             
             <main>
                 <section id="inventory-display">
-                    <h2>Current Inventory</h2>
+                    <div class="inventory-header">
+                        <h2>Current Inventory</h2>
+                        <div class="inventory-summary">
+                            <div class="summary-cards">
+                                <div class="summary-card" id="under-repair">
+                                    <span class="summary-label">Returned</span>
+                                    <span class="summary-value">0</span>
+                                </div>
+                                <div class="summary-card" id="ready-to-use">
+                                    <span class="summary-label">Items</span>
+                                    <span class="summary-value">0</span>
+                                </div>
+                                <div class="summary-card" id="low-stock">
+                                    <span class="summary-label">Low Stock</span>
+                                    <span class="summary-value">0</span>
+                                </div>
+                                <div class="summary-card" id="no-stock">
+                                    <span class="summary-label">Out of Stock</span>
+                                    <span class="summary-value">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="inventory-filters">
                         <input type="text" id="search-items" placeholder="Search items...">
                         <select id="type-filter">
@@ -56,46 +81,26 @@
                             <option value="repaired">Repaired</option>
                         </select>
                     </div>
-                    <table id="inventory-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Brand</th>
-                                <th>Manufacturer</th>
-                                <th>Type</th>
-                                <th>Quantity</th>
-                                <th>Unit</th>
-                                <th>Description</th>
-                                <th>Supplier Name</th>
-                                <th>Supplier Number</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="inventory-list">
-                            <!-- Inventory items will be populated here by JavaScript -->
-                        </tbody>
-                    </table>
-                </section>
-
-                <section id="inventory-summary">
-                    <h2>Inventory Summary</h2>
-                    <div class="summary-cards">
-                        <div class="summary-card" id="under-repair">
-                            <h3>Items Returned</h3>
-                            <p>0</p>
-                        </div>
-                        <div class="summary-card" id="ready-to-use">
-                            <h3>Items</h3>
-                            <p>0</p>
-                        </div>
-                        <div class="summary-card" id="low-stock">
-                            <h3>Low Stock Items</h3>
-                            <p>0</p>
-                        </div>
-                        <div class="summary-card" id="no-stock">
-                            <h3>Out of Stock</h3>
-                            <p>0</p>
-                        </div>
+                    <div class="table-container">
+                        <table id="inventory-table">
+                            <thead>
+                                <tr>
+                                    <th>No.</th>
+                                    <th>Brand</th>
+                                    <th>Manufacturer</th>
+                                    <th>Type</th>
+                                    <th>Quantity</th>
+                                    <th>Unit</th>
+                                    <th>SIZE/SPECIFICATION</th>
+                                    <th>Supplier Name</th>
+                                    <th>CONTACT NUMBER</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventory-list">
+                                <!-- Inventory items will be populated here by JavaScript -->
+                            </tbody>
+                        </table>
                     </div>
                 </section>
             </main>
@@ -111,7 +116,7 @@
             <div id="add-inventory-modal" class="modal" style="display:none;">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h2>Add Inventory Item</h2>
+                        <h2>Add Inventory</h2>
                         <span class="close-modal" id="close-add-inventory">&times;</span>
                     </div>
                     <div class="modal-body">
@@ -136,6 +141,10 @@
                                     <input type="number" id="inv-quantity" min="1" step="1" required>
                                 </div>
                                 <div class="form-group">
+                                    <label for="inv-restock">ReStock No.</label>
+                                    <input type="number" id="inv-restock" min="1" step="1" placeholder="e.g., 5" required>
+                                </div>
+                                <div class="form-group">
                                     <label for="inv-unit">Quantity Unit</label>
                                     <select id="inv-unit" required>
                                         <option value="" disabled selected>Select unit</option>
@@ -147,8 +156,8 @@
                                 </div>
                             </div>
                             <div class="form-group">
-                                <label for="inv-description">Description</label>
-                                <input type="text" id="inv-description" placeholder="Short description">
+                                <label for="inv-description">Size/Specification</label>
+                                <input type="text" id="inv-description" placeholder="">
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
@@ -156,7 +165,7 @@
                                     <input type="text" id="inv-supplier-name" required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="inv-supplier-number">Supplier Number</label>
+                                    <label for="inv-supplier-number">Contact Number</label>
                                     <input type="tel" id="inv-supplier-number" placeholder="09XXXXXXXXX" inputmode="numeric" pattern="09[0-9]{9}" maxlength="11" title="Must start with 09 and be 11 digits" required>
                                 </div>
                             </div>

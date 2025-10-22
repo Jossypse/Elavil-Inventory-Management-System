@@ -83,6 +83,48 @@ function addPaginationControls() {
 let currentRequests = [];
 let mechanicIdToName = {};
 
+// Function to populate date filter with unique dates from requests
+function populateDateFilter(requests) {
+    const dateFilter = document.getElementById('date-filter');
+    if (!dateFilter) return;
+    
+    // Keep the "All Time" option
+    const allTimeOption = dateFilter.querySelector('option[value="all"]');
+    dateFilter.innerHTML = '';
+    if (allTimeOption) {
+        dateFilter.appendChild(allTimeOption);
+    }
+    
+    // Extract unique dates from requests
+    const uniqueDates = new Set();
+    requests.forEach(request => {
+        const ts = parseRequestDate(request);
+        if (ts) {
+            const date = new Date(ts);
+            const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+            uniqueDates.add(dateString);
+        }
+    });
+    
+    // Sort dates (newest first)
+    const sortedDates = Array.from(uniqueDates).sort((a, b) => b.localeCompare(a));
+    
+    // Add date options
+    sortedDates.forEach(dateString => {
+        const date = new Date(dateString);
+        const displayDate = date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+        
+        const option = document.createElement('option');
+        option.value = dateString;
+        option.textContent = displayDate;
+        dateFilter.appendChild(option);
+    });
+}
+
 // Modal items pagination state
 let modalItems = [];
 let modalItemsPage = 1;
@@ -118,6 +160,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add pagination controls
     addPaginationControls();
     
+    // Show table container and render skeleton rows during initial load
+    if (requestsTableContainer) {
+        requestsTableContainer.style.display = 'block';
+    }
+    if (requestsTableBody) {
+        renderSkeletonRows(requestsTableBody, 6, 8);
+    }
+
     // Load requests
     loadRequests();
 
@@ -157,8 +207,7 @@ function loadRequests() {
     // Remove any existing listeners to prevent duplicates
     requestsRef.off();
     
-    // Show loading state
-    requestsTableBody.innerHTML = '<tr><td colspan="6" class="loading">Loading requests...</td></tr>';
+    // Keep skeleton visible (already rendered in DOMContentLoaded)
     
     console.log('Loading requests from Firebase...');
     
@@ -194,6 +243,7 @@ function loadRequests() {
             currentPage = 1;
             displayRequests(requests);
             updateStats(requests);
+            populateDateFilter(requests);
             
             // Set up individual listeners after initial load
             setupRequestListeners();
@@ -421,12 +471,12 @@ async function displayRequests(requests) {
         
         const mechName = getMechanicName(request.mechanicId);
         row.innerHTML = `
-            <td>${rowNum++}</td>
-            <td>${mechName}</td>
-            <td>${request.busId}</td>
-            <td>${request.date}</td>
-            <td><span class="status-badge status-${request.status.toLowerCase()}">${request.status}</span></td>
-            <td>
+            <td data-label="No.">${rowNum++}</td>
+            <td data-label="Mechanic">${mechName}</td>
+            <td data-label="Bus No.">${request.busId}</td>
+            <td data-label="Date">${request.date}</td>
+            <td data-label="Status"><span class="status-badge status-${request.status.toLowerCase()}">${request.status}</span></td>
+            <td data-label="Actions">
                 <button class="action-button view-button" onclick="viewRequest('${request.partsRequestID}')">
                     View
                 </button>
@@ -451,6 +501,26 @@ function updatePaginationControls() {
     prevButton.disabled = currentPage === 1;
     nextButton.disabled = currentPage === totalPages;
     pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+}
+
+// Render skeleton placeholder rows to preserve layout during loading
+function renderSkeletonRows(tbody, columns, rows) {
+    if (!tbody) return;
+    const frag = document.createDocumentFragment();
+    for (let r = 0; r < rows; r++) {
+        const tr = document.createElement('tr');
+        tr.className = 'skeleton-row';
+        for (let c = 0; c < columns; c++) {
+            const td = document.createElement('td');
+            const bar = document.createElement('span');
+            bar.className = 'skeleton';
+            td.appendChild(bar);
+            tr.appendChild(td);
+        }
+        frag.appendChild(tr);
+    }
+    tbody.innerHTML = '';
+    tbody.appendChild(frag);
 }
 
 // Update statistics
@@ -507,27 +577,13 @@ function filterByDate(request, filterValue) {
     const ts = parseRequestDate(request);
     if (!ts) return false;
     const d = new Date(ts);
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfYesterday = new Date(startOfToday);
-    startOfYesterday.setDate(startOfToday.getDate() - 1);
-    const startOfWeek = new Date(startOfToday);
-    const day = startOfWeek.getDay();
-    const diffToMonday = (day === 0 ? 6 : day - 1);
-    startOfWeek.setDate(startOfWeek.getDate() - diffToMonday);
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    switch (filterValue) {
-        case 'today':
-            return d >= startOfToday;
-        case 'yesterday':
-            return d >= startOfYesterday && d < startOfToday;
-        case 'week':
-            return d >= startOfWeek;
-        case 'month':
-            return d >= startOfMonth;
-        default:
-            return true;
-    }
+    const filterDate = new Date(filterValue);
+    
+    // Compare dates (ignore time)
+    const requestDateString = d.toISOString().split('T')[0];
+    const filterDateString = filterDate.toISOString().split('T')[0];
+    
+    return requestDateString === filterDateString;
 }
 
 // View request details
@@ -623,15 +679,77 @@ function updateModalContent(request) {
     rejectButton.addEventListener('click', () => updateRequestStatus('NotAvailable'));
 }
 
+// Generate activity ID using request ID + counter
+async function generateActivityId(activitiesRef, requestId) {
+    let baseActivityId = requestId;
+    let counter = 1;
+    let candidateId = `${baseActivityId}-${counter}`;
+    
+    // Check if this activity ID already exists
+    while (true) {
+        const existsSnap = await activitiesRef.child(candidateId).once('value');
+        if (!existsSnap.exists()) {
+            break;
+        }
+        counter++;
+        candidateId = `${baseActivityId}-${counter}`;
+    }
+    
+    return candidateId;
+}
+
 // Function to update request status without page refresh
 async function updateRequestStatus(newStatus) {
     if (!currentRequest) return;
     
     try {
-        // Update in Firebase
+        // Get current user information
+        const userSession = sessionStorage.getItem('elavil_user');
+        let updatedBy = 'Unknown User';
+        let updatedByRole = 'Unknown Role';
+        
+        if (userSession) {
+            try {
+                const user = JSON.parse(userSession);
+                updatedBy = user.fullName || 'Unknown User';
+                // Map level to role
+                if (user.level === 3) {
+                    updatedByRole = 'Supervisor';
+                } else if (user.level === 4) {
+                    updatedByRole = 'Administrator';
+                } else {
+                    updatedByRole = user.employeeType || 'Unknown Role';
+                }
+            } catch (e) {
+                console.error('Error parsing user session:', e);
+            }
+        }
+
+        // Update in Firebase with user tracking
         await requestsRef.child(currentRequest.partsRequestID).update({
-            status: newStatus
+            status: newStatus,
+            updatedBy,
+            updatedByRole,
+            updatedAt: Date.now()
         });
+
+        // Save activity record
+        const activitiesRef = database.ref('activities');
+        const statusText = newStatus === 'ToPickup' ? 'approved for pickup' : 'marked as not available';
+        const activityDescription = `Request ${statusText} for Bus ${currentRequest.busId}`;
+        
+        // Generate activity ID using request ID + counter
+        const activityId = await generateActivityId(activitiesRef, currentRequest.partsRequestID);
+        
+        const activityRecord = {
+            time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+            actType: 'Request',
+            description: activityDescription,
+            user: updatedBy,
+            role: updatedByRole
+        };
+        
+        await activitiesRef.child(activityId).set(activityRecord);
 
         // Update the status in the table row
         const tableRow = document.querySelector(`tr[data-request-id="${currentRequest.partsRequestID}"]`);
@@ -684,46 +802,6 @@ async function updateRequestStatus(newStatus) {
     }
 }
 
-// Function to update request status
-async function updateRequestStatus(newStatus) {
-    if (!currentRequest) return;
-    
-    try {
-        // Update in Firebase
-        await requestsRef.child(currentRequest.partsRequestID).update({
-            status: newStatus
-        });
-
-        // Show success notification
-        const notification = document.createElement('div');
-        notification.className = 'status-update-notification';
-        notification.textContent = `Status updated to ${newStatus}`;
-        document.body.appendChild(notification);
-        
-        // Remove notification after animation
-        setTimeout(() => {
-            notification.remove();
-        }, 3000);
-
-        // Close the modal with animation
-        modal.style.animation = 'fadeOut 0.3s ease';
-        setTimeout(() => {
-            closeRequestModal();
-            modal.style.animation = '';
-        }, 300);
-        
-    } catch (error) {
-        console.error('Error updating status:', error);
-        const errorNotification = document.createElement('div');
-        errorNotification.className = 'status-update-notification error';
-        errorNotification.textContent = 'Failed to update status';
-        document.body.appendChild(errorNotification);
-        
-        setTimeout(() => {
-            errorNotification.remove();
-        }, 3000);
-    }
-}
 
 // Update action buttons based on current status
 function updateActionButtons() {
@@ -776,10 +854,27 @@ function rejectRequest() {
     approveButton.disabled = true;
     rejectButton.disabled = true;
     
+    // Get current user information
+    const userSession = sessionStorage.getItem('elavil_user');
+    let updatedBy = 'Unknown User';
+    let updatedByRole = 'Unknown Role';
+    if (userSession) {
+        try {
+            const user = JSON.parse(userSession);
+            updatedBy = user.fullName || 'Unknown User';
+            if (user.level === 3) updatedByRole = 'Supervisor';
+            else if (user.level === 4) updatedByRole = 'Administrator';
+            else updatedByRole = user.employeeType || 'Unknown Role';
+        } catch(e) { console.error('Error parsing user session:', e); }
+    }
+
     const updates = {
         status: 'NotAvailable',
         notes: modalNotes.value,
-        rejectedDate: new Date().toISOString()
+        rejectedDate: new Date().toISOString(),
+        updatedBy,
+        updatedByRole,
+        updatedAt: Date.now()
     };
     
     requestsRef.child(currentRequest.partsRequestID).update(updates)
@@ -804,10 +899,27 @@ function approveRequest() {
     approveButton.disabled = true;
     rejectButton.disabled = true;
     
+    // Get current user information
+    const userSession = sessionStorage.getItem('elavil_user');
+    let updatedBy = 'Unknown User';
+    let updatedByRole = 'Unknown Role';
+    if (userSession) {
+        try {
+            const user = JSON.parse(userSession);
+            updatedBy = user.fullName || 'Unknown User';
+            if (user.level === 3) updatedByRole = 'Supervisor';
+            else if (user.level === 4) updatedByRole = 'Administrator';
+            else updatedByRole = user.employeeType || 'Unknown Role';
+        } catch(e) { console.error('Error parsing user session:', e); }
+    }
+
     const updates = {
         status: 'ToPickup',
         notes: modalNotes.value,
-        approvedDate: new Date().toISOString()
+        approvedDate: new Date().toISOString(),
+        updatedBy,
+        updatedByRole,
+        updatedAt: Date.now()
     };
     
     requestsRef.child(currentRequest.partsRequestID).update(updates)

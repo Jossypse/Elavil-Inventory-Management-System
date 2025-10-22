@@ -1,9 +1,9 @@
 (function() {
-    // Check if user has supervisor access (level 3)
+    // Check if user has supervisor or admin access (level 3 or 4)
     function checkSupervisorAccess() {
         const user = window.ElavilAuth ? window.ElavilAuth.getCurrentUser() : null;
-        if (!user || user.level !== 3) {
-            alert('Access denied. Only supervisors can access return requests.');
+        if (!user || (user.level !== 3 && user.level !== 4)) {
+            alert('Access denied. Only supervisors and admins can access return requests.');
             window.location.href = 'index.html';
             return false;
         }
@@ -34,6 +34,25 @@
     const returnRequestsRef = database.ref('ReturnRequests');
     const returnPartsRef = database.ref('ReturnParts');
     
+    // Generate activity ID using request ID + counter
+    async function generateActivityId(activitiesRef, requestId) {
+        let baseActivityId = requestId;
+        let counter = 1;
+        let candidateId = `${baseActivityId}-${counter}`;
+        
+        // Check if this activity ID already exists
+        while (true) {
+            const existsSnap = await activitiesRef.child(candidateId).once('value');
+            if (!existsSnap.exists()) {
+                break;
+            }
+            counter++;
+            candidateId = `${baseActivityId}-${counter}`;
+        }
+        
+        return candidateId;
+    }
+    
     console.log('Firebase database initialized'); // Debug log
     console.log('ReturnRequests ref:', returnRequestsRef.toString()); // Debug log
     console.log('ReturnParts ref:', returnPartsRef.toString()); // Debug log
@@ -61,6 +80,54 @@
     let currentPage = 1;
     const itemsPerPage = 5;
     let filteredRequests = [];
+
+    // Function to populate date filter with unique dates from return requests
+    function populateDateFilter(requests) {
+        const dateFilter = document.getElementById('date-filter');
+        if (!dateFilter) return;
+        
+        // Keep the "All Time" option
+        const allTimeOption = dateFilter.querySelector('option[value="all"]');
+        dateFilter.innerHTML = '';
+        if (allTimeOption) {
+            dateFilter.appendChild(allTimeOption);
+        }
+        
+        // Extract unique dates from requests - use the displayDate field directly
+        const uniqueDates = new Set();
+        requests.forEach(request => {
+            // Use the displayDate field which should contain the formatted date
+            if (request.displayDate && request.displayDate !== 'N/A') {
+                // Convert displayDate (dd/mm/yyyy) to YYYY-MM-DD for filtering
+                const dateParts = request.displayDate.split('/');
+                if (dateParts.length === 3) {
+                    const day = dateParts[0].padStart(2, '0');
+                    const month = dateParts[1].padStart(2, '0');
+                    const year = dateParts[2];
+                    const dateString = `${year}-${month}-${day}`;
+                    uniqueDates.add(dateString);
+                }
+            }
+        });
+        
+        // Sort dates (newest first)
+        const sortedDates = Array.from(uniqueDates).sort((a, b) => b.localeCompare(a));
+        
+        // Add date options
+        sortedDates.forEach(dateString => {
+            const date = new Date(dateString);
+            const displayDate = date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            
+            const option = document.createElement('option');
+            option.value = dateString;
+            option.textContent = displayDate;
+            dateFilter.appendChild(option);
+        });
+    }
 
     function formatDate(timestamp) {
         if (!timestamp) return 'N/A';
@@ -106,36 +173,24 @@
 
             // Date filter
             if (dateFilter && dateFilter !== 'all') {
-                const now = new Date();
-                let requestDate = null;
-                
-                // Prefer robust parse from ID or ISO
-                const ts = parseReturnDate(request);
-                if (ts) requestDate = new Date(ts);
-                
-                // If date parsing failed, skip this filter
-                if (!requestDate || isNaN(requestDate.getTime())) {
-                    return true; // Don't filter out if we can't parse the date
-                }
-                
-                switch (dateFilter) {
-                    case 'today':
-                        if (requestDate.toDateString() !== now.toDateString()) {
+                // Use displayDate field for filtering
+                if (request.displayDate && request.displayDate !== 'N/A') {
+                    // Convert displayDate (dd/mm/yyyy) to YYYY-MM-DD for comparison
+                    const dateParts = request.displayDate.split('/');
+                    if (dateParts.length === 3) {
+                        const day = dateParts[0].padStart(2, '0');
+                        const month = dateParts[1].padStart(2, '0');
+                        const year = dateParts[2];
+                        const requestDateString = `${year}-${month}-${day}`;
+                        
+                        if (requestDateString !== dateFilter) {
                             return false;
                         }
-                        break;
-                    case 'week':
-                        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                        if (requestDate < weekAgo) {
-                            return false;
-                        }
-                        break;
-                    case 'month':
-                        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-                        if (requestDate < monthAgo) {
-                            return false;
-                        }
-                        break;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
                 }
             }
 
@@ -314,16 +369,16 @@
             const originalStatus = request.originalStatus || request.status || 'pending';
             const globalIndex = (currentPage - 1) * itemsPerPage + index + 1;
             const ts = parseReturnDate(request);
-            const dateOut = ts ? new Date(ts).toLocaleString() : escapeHtml(request.displayDate || 'N/A');
+            const dateOut = ts ? new Date(ts).toLocaleDateString('en-GB') : escapeHtml(request.displayDate || 'N/A');
             
             tr.innerHTML = `
-                <td>${globalIndex}</td>
-                <td>${dateOut}</td>
-                <td>${escapeHtml(request.busId || 'N/A')}</td>
-                <td>${escapeHtml(request.requestedBy || 'N/A')}</td>
-                <td><span class="status-badge ${getStatusBadgeClass(request.status)}">${escapeHtml(originalStatus)}</span></td>
-                <td>${request.itemsCount || 0}</td>
-                <td>
+                <td data-label="#">${globalIndex}</td>
+                <td data-label="Date">${dateOut}</td>
+                <td data-label="Bus ID">${escapeHtml(request.busId || 'N/A')}</td>
+                <td data-label="Requested By">${escapeHtml(request.requestedBy || 'N/A')}</td>
+                <td data-label="Status"><span class="status-badge ${getStatusBadgeClass(request.status)}">${escapeHtml(originalStatus)}</span></td>
+                <td data-label="Items Count">${request.itemsCount || 0}</td>
+                <td data-label="Actions">
                     <button class="action-btn view-btn" data-action="view" data-id="${request.id}">
                         <i class="fas fa-eye"></i> View
                     </button>
@@ -468,10 +523,33 @@
     function updateReturnRequestStatus(status) {
         if (!currentReturnRequestId) return;
 
+        // Get current user information
+        const userSession = sessionStorage.getItem('elavil_user');
+        let processedBy = 'Unknown User';
+        let processedByRole = 'Unknown Role';
+        
+        if (userSession) {
+            try {
+                const user = JSON.parse(userSession);
+                processedBy = user.fullName || 'Unknown User';
+                // Map level to role
+                if (user.level === 3) {
+                    processedByRole = 'Supervisor';
+                } else if (user.level === 4) {
+                    processedByRole = 'Administrator';
+                } else {
+                    processedByRole = user.employeeType || 'Unknown Role';
+                }
+            } catch (e) {
+                console.error('Error parsing user session:', e);
+            }
+        }
+
         const updates = {
             status: status,
             processedDate: Date.now(),
-            processedBy: window.ElavilAuth.getCurrentUser().username
+            processedBy,
+            processedByRole
         };
 
         returnRequestsRef.child(currentReturnRequestId).update(updates, (error) => {
@@ -550,13 +628,47 @@
         }));
 
         // Finally, mark request accepted
-        await returnRequestsRef.child(requestId).update({ status: 'accepted', processedDate: Date.now() });
+        // Get current user information
+        const userSession = sessionStorage.getItem('elavil_user');
+        let processedBy = 'Unknown User';
+        let processedByRole = 'Unknown Role';
+        if (userSession) {
+            try {
+                const user = JSON.parse(userSession);
+                processedBy = user.fullName || 'Unknown User';
+                if (user.level === 3) processedByRole = 'Supervisor';
+                else if (user.level === 4) processedByRole = 'Administrator';
+                else processedByRole = user.employeeType || 'Unknown Role';
+            } catch(e) { console.error('Error parsing user session:', e); }
+        }
+
+        await returnRequestsRef.child(requestId).update({ status: 'accepted', processedDate: Date.now(), processedBy, processedByRole });
+
+        // Save activity record
+        const activitiesRef = database.ref('activities');
+        const activityDescription = `Return request accepted for Bus ${request.busId}`;
+        
+        // Generate activity ID using request ID + counter
+        const activityId = await generateActivityId(activitiesRef, requestId);
+        
+        const activityRecord = {
+            time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+            actType: 'Return',
+            description: activityDescription,
+            user: processedBy,
+            role: processedByRole
+        };
+        
+        await activitiesRef.child(activityId).set(activityRecord);
 
         alert('Return accepted and inventory updated');
         modal.style.display = 'none';
     }
 
     function loadReturnRequests() {
+        // Show skeletons while computing first render
+        if (tableContainer) tableContainer.style.display = 'block';
+        if (tableBody) renderSkeletonRows(tableBody, 7, 8);
         returnRequestsRef.once('value', (snapshot) => {
             const requests = [];
             snapshot.forEach((child) => {
@@ -606,6 +718,7 @@
                 allReturnRequests = requests;
                 console.log('Loaded return requests with items:', requests); // Debug log
                 renderReturnRequests(requests);
+                populateDateFilter(requests);
             });
         }).catch((error) => {
             console.error('Error loading return requests:', error);
@@ -680,9 +793,47 @@
         }
     });
 
-    rejectBtn.addEventListener('click', () => {
+    rejectBtn.addEventListener('click', async () => {
         if (confirm('Are you sure you want to reject this return request?')) {
-            updateReturnRequestStatus('rejected');
+            // Get current user information for rejection path
+            const userSession = sessionStorage.getItem('elavil_user');
+            let processedBy = 'Unknown User';
+            let processedByRole = 'Unknown Role';
+            if (userSession) {
+                try {
+                    const user = JSON.parse(userSession);
+                    processedBy = user.fullName || 'Unknown User';
+                    if (user.level === 3) processedByRole = 'Supervisor';
+                    else if (user.level === 4) processedByRole = 'Administrator';
+                    else processedByRole = user.employeeType || 'Unknown Role';
+                } catch(e) { console.error('Error parsing user session:', e); }
+            }
+            
+            // Update status
+            await updateReturnRequestStatus('rejected');
+            await returnRequestsRef.child(currentReturnRequestId).update({ processedBy, processedByRole });
+            
+            // Get bus ID from the current return request
+            const requestSnapshot = await returnRequestsRef.child(currentReturnRequestId).once('value');
+            const requestData = requestSnapshot.val();
+            const busId = requestData ? requestData.busId : 'Unknown';
+            
+            // Save activity record
+            const activitiesRef = database.ref('activities');
+            const activityDescription = `Return request rejected for Bus ${busId}`;
+            
+            // Generate activity ID using request ID + counter
+            const activityId = await generateActivityId(activitiesRef, currentReturnRequestId);
+            
+            const activityRecord = {
+                time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+                actType: 'Return',
+                description: activityDescription,
+                user: processedBy,
+                role: processedByRole
+            };
+            
+            await activitiesRef.child(activityId).set(activityRecord);
         }
     });
 
@@ -786,6 +937,7 @@
                 });
                 allReturnRequests = requests;
                 renderReturnRequests(requests);
+                populateDateFilter(requests);
             } else {
                 allReturnRequests = [];
                 renderReturnRequests([]);
@@ -816,6 +968,7 @@
                 });
                 // Re-render with updated counts
                 renderReturnRequests(allReturnRequests);
+                populateDateFilter(allReturnRequests);
             }
         }, (error) => {
             console.error('Error listening to ReturnParts:', error);
@@ -838,10 +991,34 @@
                 });
                 // Keep current page; renderer will clamp within bounds
                 renderReturnRequests(allReturnRequests);
+                populateDateFilter(allReturnRequests);
             }
         });
     }
 
     // Set up real-time listeners
     setupRealtimeListeners();
+    // Initial skeletons before first data arrives
+    if (tableContainer) tableContainer.style.display = 'block';
+    if (tableBody) renderSkeletonRows(tableBody, 7, 8);
 })();
+
+// Render skeleton placeholder rows to preserve layout during loading
+function renderSkeletonRows(tbody, columns, rows) {
+    if (!tbody) return;
+    const frag = document.createDocumentFragment();
+    for (let r = 0; r < rows; r++) {
+        const tr = document.createElement('tr');
+        tr.className = 'skeleton-row';
+        for (let c = 0; c < columns; c++) {
+            const td = document.createElement('td');
+            const bar = document.createElement('span');
+            bar.className = 'skeleton';
+            td.appendChild(bar);
+            tr.appendChild(td);
+        }
+        frag.appendChild(tr);
+    }
+    tbody.innerHTML = '';
+    tbody.appendChild(frag);
+}

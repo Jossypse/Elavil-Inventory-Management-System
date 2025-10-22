@@ -22,10 +22,10 @@ const inventoryList = document.getElementById('inventory-list');
 const searchInput = document.getElementById('search-items');
 const typeFilter = document.getElementById('type-filter');
 const statusFilterEl = document.getElementById('status-filter');
-const underRepairEl = document.getElementById('under-repair').querySelector('p');
-const readyToUseEl = document.getElementById('ready-to-use').querySelector('p');
-const lowStockEl = document.getElementById('low-stock').querySelector('p');
-const noStockEl = document.getElementById('no-stock').querySelector('p');
+const underRepairEl = document.getElementById('under-repair').querySelector('.summary-value');
+const readyToUseEl = document.getElementById('ready-to-use').querySelector('.summary-value');
+const lowStockEl = document.getElementById('low-stock').querySelector('.summary-value');
+const noStockEl = document.getElementById('no-stock').querySelector('.summary-value');
 const sidebarItems = document.querySelectorAll('.sidebar-menu li');
 
 // Pagination variables
@@ -39,6 +39,8 @@ let uniqueTypes = new Set();
 
 // Wait for the DOM to fully load
 document.addEventListener('DOMContentLoaded', function() {
+    // Render skeleton rows while loading
+    renderSkeletonRows(inventoryList, 10, 5);
     // Initialize inventory data from Firebase
     loadInventoryData();
     
@@ -129,6 +131,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const manufacturer = document.getElementById('inv-manufacturer').value.trim();
             const type = document.getElementById('inv-type').value.trim();
             const quantityStr = document.getElementById('inv-quantity').value.trim();
+            const restockStr = (document.getElementById('inv-restock') && document.getElementById('inv-restock').value.trim()) || '';
             const unit = document.getElementById('inv-unit').value;
             const description = document.getElementById('inv-description').value.trim();
             const supplierName = document.getElementById('inv-supplier-name').value.trim();
@@ -136,9 +139,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Validate
             const qty = Number(quantityStr);
+            const limitL = Number(restockStr);
             if (!Number.isInteger(qty) || qty <= 0) { alert('Quantity must be a whole number greater than 0.'); return; }
+            if (!Number.isInteger(limitL) || limitL <= 0) { alert('ReStock No. must be a whole number greater than 0.'); return; }
             if (!/^09\d{9}$/.test(supplierNumber)) { alert('Supplier Number must start with 09 and be 11 digits.'); return; }
             if (!unit) { alert('Please select a quantity unit.'); return; }
+
+            // Get current user information
+            const userSession = sessionStorage.getItem('elavil_user');
+            let addedBy = 'Unknown User';
+            let addedByRole = 'Unknown Role';
+            
+            if (userSession) {
+                try {
+                    const user = JSON.parse(userSession);
+                    addedBy = user.fullName || 'Unknown User';
+                    // Map level to role
+                    if (user.level === 3) {
+                        addedByRole = 'Supervisor';
+                    } else if (user.level === 4) {
+                        addedByRole = 'Administrator';
+                    } else {
+                        addedByRole = user.employeeType || 'Unknown Role';
+                    }
+                } catch (e) {
+                    console.error('Error parsing user session:', e);
+                }
+            }
 
             // Generate an ID: yyyymmddHHMMSS + normalized name
             const now = new Date();
@@ -152,16 +179,37 @@ document.addEventListener('DOMContentLoaded', function() {
                 manufacturer,
                 type,
                 quantity: qty,
+                limitL,
                 quantityUnit: unit,
                 description,
                 supplierName,
                 supplierNumber,
+                addedBy,
+                addedByRole,
                 createdAt: Date.now(),
                 lastUpdated: Date.now()
             };
 
             try {
                 await inventoryRef.child(newId).set(payload);
+                
+                // Save activity record to activities database
+                const activitiesRef = database.ref('activities');
+                const activityDescription = `Added ${qty} ${brand} ${type} to inventory`;
+                
+                // Generate activity ID using inventory ID + counter
+                const activityId = await generateActivityId(activitiesRef, newId);
+                
+                const activityRecord = {
+                    time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+                    actType: 'Inventory',
+                    description: activityDescription,
+                    user: addedBy,
+                    role: addedByRole
+                };
+                
+                await activitiesRef.child(activityId).set(activityRecord);
+                
                 // Do not mutate local cache; rely on realtime listener to update UI consistently
                 alert('Inventory item added.');
                 closeModal();
@@ -198,6 +246,50 @@ document.addEventListener('DOMContentLoaded', function() {
                     const curr = Number(current || 0);
                     return curr + addQty;
                 });
+                
+                // Save activity record for quantity adjustment
+                const activitiesRef = database.ref('activities');
+                
+                // Get current user info
+                const userSession = sessionStorage.getItem('elavil_user');
+                let adjustedBy = 'Unknown User';
+                let adjustedByRole = 'Unknown Role';
+                
+                if (userSession) {
+                    try {
+                        const user = JSON.parse(userSession);
+                        adjustedBy = user.fullName || 'Unknown User';
+                        if (user.level === 3) {
+                            adjustedByRole = 'Supervisor';
+                        } else if (user.level === 4) {
+                            adjustedByRole = 'Administrator';
+                        } else {
+                            adjustedByRole = user.employeeType || 'Unknown Role';
+                        }
+                    } catch (e) {
+                        console.error('Error parsing user session:', e);
+                    }
+                }
+                
+                // Get item details for description
+                const itemSnapshot = await inventoryRef.child(id).once('value');
+                const item = itemSnapshot.val();
+                
+                const activityDescription = `Added ${addQty} ${item.brand} ${item.type}`;
+                
+                // Generate activity ID using inventory ID + counter
+                const activityId = await generateActivityId(activitiesRef, id);
+                
+                const activityRecord = {
+                    time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+                    actType: 'Inventory',
+                    description: activityDescription,
+                    user: adjustedBy,
+                    role: adjustedByRole
+                };
+                
+                await activitiesRef.child(activityId).set(activityRecord);
+                
                 // Let realtime child_changed update the UI and summary to avoid double renders
                 closeAdj();
             } catch (err) {
@@ -387,9 +479,16 @@ function filterInventory() {
     const typeValue = typeFilter.value;
     const statusValue = (statusFilterEl && statusFilterEl.value) || 'all';
     
-    // Filter the items based on search and type filter
+    // Filter the items based on search and type filter, but exclude RET/RETF variants
     filteredItems = Object.entries(inventoryData)
         .filter(([itemId, item]) => {
+            const upperId = String(itemId).toUpperCase();
+            
+            // Skip RET/RETF variants - only include base items in main filtering
+            if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId)) {
+                return false;
+            }
+            
             const matchesSearch =
                 (itemId && itemId.toLowerCase().includes(searchTerm)) ||
                 (item.type && item.type.toLowerCase().includes(searchTerm)) ||
@@ -410,30 +509,87 @@ function filterInventory() {
     
     // Update pagination info
     updatePaginationInfo();
-    
-    // Render the current page
-    renderCurrentPage();
 }
 
 // Compute normalized status code for filtering
 function computeStatusCode(itemId, item) {
     const upperId = String(itemId).toUpperCase();
     const quantity = parseInt(item.quantity || 0);
+    const limitL = parseInt(item.limitL || 0);
+    
     if (/-RET(?:-\d+)?$/i.test(upperId)) return 'returned';
     if (/-RETR(?:-\d+)?$/i.test(upperId)) return 'under_repair';
     if (/-RETF(?:-\d+)?$/i.test(upperId)) return 'repaired';
     if (quantity <= 0) return 'no_stock';
-    if (quantity > 15) return 'available';
+    if (quantity > limitL) return 'available';
     return 'low_stock';
 }
 
-function createItemRow(itemId, item, index) {
+function createItemRowWithVariants(itemId, item, index, variants = []) {
+    const row = document.createElement('tr');
+    row.setAttribute('data-item-id', itemId);
+    const quantity = parseInt(item.quantity || 0);
+    
+    // Compute status text and color for base item
+    const limitL = parseInt(item.limitL || 0);
+    let statusText = '';
+    let statusColor = '';
+    if (quantity <= 0) {
+        statusText = 'No stock';
+        statusColor = '#e74c3c';
+    } else if (quantity > limitL) {
+        statusText = 'Available';
+        statusColor = '#2ecc71';
+    } else {
+        statusText = 'Low Stock';
+        statusColor = '#f1c40f';
+    }
+
+    // Create variant dropdown if variants exist
+    let variantDropdown = '';
+    if (variants.length > 0) {
+        variantDropdown = `
+            <div class="variant-dropdown">
+                <button class="variant-toggle-btn" onclick="toggleVariants('${itemId}')">
+                    <i class="fas fa-chevron-down"></i>
+                    <span class="variant-count">${variants.length} ${variants.length !== 1 ? '' : ''}</span>
+                </button>
+            </div>
+        `;
+    }
+
+    row.innerHTML = `
+        <td data-label="No.">${index}</td>
+        <td data-label="Brand">${escapeCell(item.brand)}</td>
+        <td data-label="Manufacturer">${escapeCell(item.manufacturer)}</td>
+        <td data-label="Type">${escapeCell(item.type)}</td>
+        <td data-label="Quantity" class="quantity-cell">${quantity}</td>
+        <td data-label="Unit">${escapeCell(item.quantityUnit)}</td>
+        <td data-label="Description">${escapeCell(item.description)}</td>
+        <td data-label="Supplier Name">${escapeCell(item.supplierName)}</td>
+        <td data-label="Supplier Number">${escapeCell(item.supplierNumber)}</td>
+        <td data-label="Status">
+            <span style="color:${statusColor}; font-weight:600;">${statusText}</span>
+            ${variantDropdown}
+        </td>
+    `;
+
+    // Double-click action for base item (open adjust qty)
+    row.addEventListener('dblclick', () => {
+        openAdjustQtyModal(itemId, item);
+    });
+    
+    return row;
+}
+
+function createItemRow(itemId, item, index, isGrouped = false) {
     const row = document.createElement('tr');
     row.setAttribute('data-item-id', itemId);
     const quantity = parseInt(item.quantity || 0);
     
     // Compute status text and color
     const upperId = String(itemId).toUpperCase();
+    const limitL = parseInt(item.limitL || 0);
     let statusText = '';
     let statusColor = '';
     if (/-RET(?:-\d+)?$/i.test(upperId)) {
@@ -448,7 +604,7 @@ function createItemRow(itemId, item, index) {
     } else if (quantity <= 0) {
         statusText = 'No stock';
         statusColor = '#e74c3c';
-    } else if (quantity > 15) {
+    } else if (quantity > limitL) {
         statusText = 'Available';
         statusColor = '#2ecc71';
     } else {
@@ -456,17 +612,21 @@ function createItemRow(itemId, item, index) {
         statusColor = '#f1c40f';
     }
 
+    // Add indentation for grouped items
+    const indentClass = isGrouped ? 'grouped-item' : '';
+    const indentStyle = isGrouped ? 'padding-left: 30px;' : '';
+
     row.innerHTML = `
-        <td>${index}</td>
-        <td>${escapeCell(item.brand)}</td>
-        <td>${escapeCell(item.manufacturer)}</td>
-        <td>${escapeCell(item.type)}</td>
-        <td class="quantity-cell">${quantity}</td>
-        <td>${escapeCell(item.quantityUnit)}</td>
-        <td>${escapeCell(item.description)}</td>
-        <td>${escapeCell(item.supplierName)}</td>
-        <td>${escapeCell(item.supplierNumber)}</td>
-        <td><span style="color:${statusColor}; font-weight:600;">${statusText}</span></td>
+        <td data-label="No." class="${indentClass}" style="${indentStyle}">${index}</td>
+        <td data-label="Brand" class="${indentClass}" style="${indentStyle}">${escapeCell(item.brand)}</td>
+        <td data-label="Manufacturer" class="${indentClass}" style="${indentStyle}">${escapeCell(item.manufacturer)}</td>
+        <td data-label="Type" class="${indentClass}" style="${indentStyle}">${escapeCell(item.type)}</td>
+        <td data-label="Quantity" class="quantity-cell ${indentClass}" style="${indentStyle}">${quantity}</td>
+        <td data-label="Unit" class="${indentClass}" style="${indentStyle}">${escapeCell(item.quantityUnit)}</td>
+        <td data-label="Description" class="${indentClass}" style="${indentStyle}">${escapeCell(item.description)}</td>
+        <td data-label="Supplier Name" class="${indentClass}" style="${indentStyle}">${escapeCell(item.supplierName)}</td>
+        <td data-label="Supplier Number" class="${indentClass}" style="${indentStyle}">${escapeCell(item.supplierNumber)}</td>
+        <td data-label="Status" class="${indentClass}" style="${indentStyle}"><span style="color:${statusColor}; font-weight:600;">${statusText}</span></td>
     `;
 
     // Double-click actions: transition RET -> RETR, RETR -> RETF, else open adjust qty
@@ -503,6 +663,126 @@ function createItemRow(itemId, item, index) {
     return row;
 }
 
+// Build a variant row that appears under the base row. No "No." column value.
+function createVariantRow(baseId, variantId, variantItem) {
+    const row = document.createElement('tr');
+    row.className = 'variant-row';
+    row.setAttribute('data-base-id', baseId);
+    row.setAttribute('data-item-id', variantId);
+
+    const quantity = parseInt(variantItem.quantity || 0);
+    const upperId = String(variantId).toUpperCase();
+    let statusText = '';
+    let statusColor = '';
+    if (/-RETR(?:-\d+)?$/i.test(upperId)) {
+        statusText = 'Under Repair';
+        statusColor = '#e67e22';
+    } else if (/-RETF(?:-\d+)?$/i.test(upperId)) {
+        statusText = 'Repaired';
+        statusColor = '#2ecc71';
+    } else {
+        statusText = 'Returned';
+        statusColor = '#e74c3c';
+    }
+
+    // Build 10 cells matching table structure, with blank No. and slight indent for readability
+    row.innerHTML = `
+        <td data-label="No."></td>
+        <td data-label="Brand" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.brand)}</td>
+        <td data-label="Manufacturer" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.manufacturer)}</td>
+        <td data-label="Type" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.type)}</td>
+        <td data-label="Quantity" class="quantity-cell grouped-item" style="padding-left: 30px;">${quantity}</td>
+        <td data-label="Unit" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.quantityUnit)}</td>
+        <td data-label="Description" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.description)}</td>
+        <td data-label="Supplier Name" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.supplierName)}</td>
+        <td data-label="Supplier Number" class="grouped-item" style="padding-left: 30px;">${escapeCell(variantItem.supplierNumber)}</td>
+        <td data-label="Status" class="grouped-item" style="padding-left: 30px;"><span style="color:${statusColor}; font-weight:600;">${statusText}</span></td>
+    `;
+
+    // Double click transitions maintain previous behavior for variants
+    row.addEventListener('dblclick', () => {
+        const id = String(variantId);
+        const upper = id.toUpperCase();
+        if (/-RETF(?:-\d+)?$/i.test(upper)) {
+            return;
+        }
+        if (/-RETR(?:-\d+)?$/i.test(upper)) {
+            showConfirm('Mark this item as Repaired?').then(ok => {
+                if (!ok) return;
+                transitionItemStatus(id, 'RETF').catch(err => {
+                    console.error('Failed to mark repaired:', err);
+                    alert('Failed to mark as Repaired.');
+                });
+            });
+            return;
+        }
+        if (/-RET(?:-\d+)?$/i.test(upper)) {
+            showConfirm('Put this returned item Under Repair?').then(ok => {
+                if (!ok) return;
+                transitionItemStatus(id, 'RETR').catch(err => {
+                    console.error('Failed to move to Under Repair:', err);
+                    alert('Failed to put item Under Repair.');
+                });
+            });
+            return;
+        }
+    });
+
+    return row;
+}
+
+function createGroupHeader(baseId, items, index) {
+    const row = document.createElement('tr');
+    row.className = 'group-header';
+    row.setAttribute('data-group-id', baseId);
+    
+    // Calculate total quantities for each status
+    let totalAvailable = 0;
+    let totalReturned = 0;
+    let totalUnderRepair = 0;
+    let totalRepaired = 0;
+    
+    items.forEach(([itemId, item]) => {
+        const quantity = parseInt(item.quantity || 0);
+        const upperId = String(itemId).toUpperCase();
+        if (/-RET(?:-\d+)?$/i.test(upperId)) {
+            totalReturned += quantity;
+        } else if (/-RETR(?:-\d+)?$/i.test(upperId)) {
+            totalUnderRepair += quantity;
+        } else if (/-RETF(?:-\d+)?$/i.test(upperId)) {
+            totalRepaired += quantity;
+        } else {
+            totalAvailable += quantity;
+        }
+    });
+    
+    const totalItems = items.length;
+    const totalQuantity = totalAvailable + totalReturned + totalUnderRepair + totalRepaired;
+    
+    row.innerHTML = `
+        <td colspan="10" class="group-header-cell">
+            <div class="group-header-content">
+                <button class="group-toggle-btn" onclick="toggleGroup('${baseId}')">
+                    <i class="fas fa-chevron-down group-icon"></i>
+                </button>
+                <div class="group-info">
+                    <span class="group-title">${escapeCell(baseId)}</span>
+                    <span class="group-stats">
+                        ${totalItems} item${totalItems !== 1 ? 's' : ''} • 
+                        Total: ${totalQuantity} • 
+                        Available: ${totalAvailable} • 
+                        Returned: ${totalReturned} • 
+                        Under Repair: ${totalUnderRepair} • 
+                        Repaired: ${totalRepaired}
+                    </span>
+                </div>
+            </div>
+        </td>
+    `;
+    
+    return row;
+}
+
 function escapeCell(val){
     if (val === null || val === undefined) return '';
     return String(val)
@@ -522,14 +802,20 @@ function updateItemRow(itemId, item) {
             // Preserve the current index (first cell value)
             const currentIndex = existingRow.querySelector('td')?.textContent || '';
             
+            // Check if this is a grouped item
+            const isGrouped = existingRow.classList.contains('group-item');
+            
             // Create new row with same index
-            const newRow = createItemRow(itemId, item, currentIndex);
+            const newRow = createItemRow(itemId, item, currentIndex, isGrouped);
             
             // Update existing row with animation
             existingRow.classList.add('updating');
             setTimeout(() => {
                 existingRow.innerHTML = newRow.innerHTML;
                 existingRow.className = newRow.className;
+                if (isGrouped) {
+                    existingRow.classList.add('group-item');
+                }
                 existingRow.classList.add('updated');
                 setTimeout(() => {
                     existingRow.classList.remove('updated');
@@ -559,10 +845,36 @@ function renderCurrentPage() {
     // Get items for the current page
     const currentItems = filteredItems.slice(startIndex, endIndex);
     
-    // Render each item for the current page
+    // Find variants for each base item
+    const variantItems = {};
+    
+    currentItems.forEach(([itemId, item]) => {
+        // Look for RET/RETF variants of this base item
+        const variants = [];
+        Object.entries(inventoryData).forEach(([variantId, variantItem]) => {
+            const upperVariantId = String(variantId).toUpperCase();
+            if (/-RET(?:-\d+)?$/i.test(upperVariantId) || /-RETF(?:-\d+)?$/i.test(upperVariantId)) {
+                const baseId = variantId.replace(/-(RET|RETF)(?:-\d+)?$/i, '');
+                if (baseId === itemId) {
+                    variants.push([variantId, variantItem]);
+                }
+            }
+        });
+        
+        if (variants.length > 0) {
+            variantItems[itemId] = variants;
+        }
+    });
+    
+    // Expose variants map for this page to the toggle handler
+    window.baseIdToVariants = variantItems;
+
+    // Render base items with variant dropdowns if they exist
     let rowNum = 1 + startIndex;
     currentItems.forEach(([itemId, item]) => {
-        const row = createItemRow(itemId, item, rowNum++);
+        const variants = variantItems[itemId] || [];
+        
+        const row = createItemRowWithVariants(itemId, item, rowNum++, variants);
         inventoryList.appendChild(row);
     });
     
@@ -570,7 +882,94 @@ function renderCurrentPage() {
     updatePaginationInfo();
 }
 
+// Toggle variant dropdown visibility
+window.toggleVariants = function(itemId) {
+    const toggleBtn = document.querySelector(`button[onclick="toggleVariants('${itemId}')"]`);
+    if (!toggleBtn) return;
+    const icon = toggleBtn.querySelector('i');
+    const baseRow = document.querySelector(`tr[data-item-id="${itemId}"]`);
+    if (!baseRow) return;
+    
+    // Detect if variants are already inserted
+    const nextSibling = baseRow.nextElementSibling;
+    const alreadyExpanded = nextSibling && nextSibling.classList.contains('variant-row') && nextSibling.getAttribute('data-base-id') === itemId;
+    
+    if (alreadyExpanded) {
+        // Remove all contiguous variant rows for this base item
+        let cursor = nextSibling;
+        while (cursor && cursor.classList.contains('variant-row') && cursor.getAttribute('data-base-id') === itemId) {
+            const toRemove = cursor;
+            cursor = cursor.nextElementSibling;
+            toRemove.remove();
+        }
+        icon.className = 'fas fa-chevron-down';
+        toggleBtn.classList.remove('variant-expanded');
+        return;
+    }
+    
+    // Insert variant rows just below the base row
+    const variants = (window.baseIdToVariants && window.baseIdToVariants[itemId]) || [];
+    if (!variants.length) return;
+    
+    const fragment = document.createDocumentFragment();
+    variants.forEach(([variantId, variantItem]) => {
+        fragment.appendChild(createVariantRow(itemId, variantId, variantItem));
+    });
+    
+    // Insert after base row
+    if (baseRow.nextSibling) {
+        baseRow.parentNode.insertBefore(fragment, baseRow.nextSibling);
+    } else {
+        baseRow.parentNode.appendChild(fragment);
+    }
+    
+    icon.className = 'fas fa-chevron-up';
+    toggleBtn.classList.add('variant-expanded');
+}
+
+// Toggle group visibility - make it globally accessible
+window.toggleGroup = function(baseId) {
+    const groupHeader = document.querySelector(`tr[data-group-id="${baseId}"]`);
+    const groupItems = document.querySelectorAll(`tr.group-item[data-item-id^="${baseId}"]`);
+    const toggleIcon = groupHeader.querySelector('.group-icon');
+    
+    if (!groupHeader || groupItems.length === 0) return;
+    
+    const isCollapsed = groupItems[0].style.display === 'none';
+    
+    groupItems.forEach(item => {
+        item.style.display = isCollapsed ? 'table-row' : 'none';
+    });
+    
+    // Update icon
+    toggleIcon.className = isCollapsed ? 'fas fa-chevron-up group-icon' : 'fas fa-chevron-down group-icon';
+    
+    // Update group header styling
+    groupHeader.classList.toggle('group-expanded', isCollapsed);
+}
+
+// Render skeleton placeholder rows to preserve layout during loading
+function renderSkeletonRows(tbody, columns, rows) {
+    if (!tbody) return;
+    const frag = document.createDocumentFragment();
+    for (let r = 0; r < rows; r++) {
+        const tr = document.createElement('tr');
+        tr.className = 'skeleton-row';
+        for (let c = 0; c < columns; c++) {
+            const td = document.createElement('td');
+            const bar = document.createElement('span');
+            bar.className = 'skeleton';
+            td.appendChild(bar);
+            tr.appendChild(td);
+        }
+        frag.appendChild(tr);
+    }
+    tbody.innerHTML = '';
+    tbody.appendChild(frag);
+}
+
 function updatePaginationInfo() {
+    // filteredItems now only contains base items (RET/RETF variants are excluded)
     const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
     const pageInfo = document.getElementById('page-info');
     const prevButton = document.getElementById('prev-page');
@@ -613,6 +1012,28 @@ async function transitionItemStatus(currentId, targetSuffix) {
     if (!snap.exists()) throw new Error('Item no longer exists');
     const data = snap.val() || {};
     data.lastUpdated = Date.now();
+    
+    // Get current user info for activity tracking
+    const userSession = sessionStorage.getItem('elavil_user');
+    let transitionedBy = 'Unknown User';
+    let transitionedByRole = 'Unknown Role';
+    
+    if (userSession) {
+        try {
+            const user = JSON.parse(userSession);
+            transitionedBy = user.fullName || 'Unknown User';
+            if (user.level === 3) {
+                transitionedByRole = 'Supervisor';
+            } else if (user.level === 4) {
+                transitionedByRole = 'Administrator';
+            } else {
+                transitionedByRole = user.employeeType || 'Unknown Role';
+            }
+        } catch (e) {
+            console.error('Error parsing user session:', e);
+        }
+    }
+    
     // Special handling for RETF: merge quantity into existing base -RETF if present
     if (String(targetSuffix).toUpperCase() === 'RETF') {
         const destId = `${baseId}-RETF`;
@@ -640,11 +1061,45 @@ async function transitionItemStatus(currentId, targetSuffix) {
             if (!existing.createdAt && data.createdAt) payload.createdAt = data.createdAt;
             await destRef.update(payload);
             await inventoryRef.child(currentId).remove();
+            
+            // Record activity
+            const activitiesRef = database.ref('activities');
+            const activityDescription = `Marked ${data.quantity} ${data.brand} ${data.type} as repaired`;
+            
+            // Generate activity ID using inventory ID + counter
+            const activityId = await generateActivityId(activitiesRef, destId);
+            
+            const activityRecord = {
+                time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+                actType: 'Inventory',
+                description: activityDescription,
+                user: transitionedBy,
+                role: transitionedByRole
+            };
+            
+            await activitiesRef.child(activityId).set(activityRecord);
             return;
         }
         // If no base -RETF exists, create it directly
         await destRef.set(data);
         await inventoryRef.child(currentId).remove();
+        
+        // Record activity
+        const activitiesRef = database.ref('activities');
+        const activityDescription = `Marked ${data.quantity} ${data.brand} ${data.type} as repaired`;
+        
+        // Generate activity ID using inventory ID + counter
+        const activityId = await generateActivityId(activitiesRef, destId);
+        
+        const activityRecord = {
+            time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+            actType: 'Inventory',
+            description: activityDescription,
+            user: transitionedBy,
+            role: transitionedByRole
+        };
+        
+        await activitiesRef.child(activityId).set(activityRecord);
         return;
     }
     // Default behavior for other suffixes: create unique target id if needed
@@ -659,6 +1114,43 @@ async function transitionItemStatus(currentId, targetSuffix) {
     }
     await inventoryRef.child(candidateId).set(data);
     await inventoryRef.child(currentId).remove();
+    
+    // Record activity
+    const activitiesRef = database.ref('activities');
+    const statusText = targetSuffix === 'RET' ? 'returned' : targetSuffix === 'RETR' ? 'under repair' : 'repaired';
+    const activityDescription = `Marked ${data.quantity} ${data.brand} ${data.type} as ${statusText}`;
+    
+    // Generate activity ID using inventory ID + counter
+    const activityId = await generateActivityId(activitiesRef, candidateId);
+    
+    const activityRecord = {
+        time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+        actType: 'Inventory',
+        description: activityDescription,
+        user: transitionedBy,
+        role: transitionedByRole
+    };
+    
+    await activitiesRef.child(activityId).set(activityRecord);
+}
+
+// Generate activity ID using inventory ID + counter
+async function generateActivityId(activitiesRef, inventoryId) {
+    let baseActivityId = inventoryId;
+    let counter = 1;
+    let candidateId = `${baseActivityId}-${counter}`;
+    
+    // Check if this activity ID already exists
+    while (true) {
+        const existsSnap = await activitiesRef.child(candidateId).once('value');
+        if (!existsSnap.exists()) {
+            break;
+        }
+        counter++;
+        candidateId = `${baseActivityId}-${counter}`;
+    }
+    
+    return candidateId;
 }
 
 // Modal-based confirmation helper
@@ -697,24 +1189,32 @@ function showConfirm(message) {
 function updateSummary() {
     let returnedItemsCount = 0; // Count items with -RET suffix (returned items)
     let underRepairCount = 0; // Count items with -RETR suffix (under repair items)
+    let totalItems = 0; // Total base items (matches table count)
     let availableCount = 0;
     let lowStockItems = 0;
     let noStockItems = 0;
     
-    Object.values(inventoryData).forEach(item => {
-        const quantity = parseInt(item.quantity || 0);
+    // Only count base items (without RET/RETF suffixes)
+    Object.entries(inventoryData).forEach(([itemId, item]) => {
+        const upperId = String(itemId).toUpperCase();
         
-        // Check if item has zero quantity
-        if (quantity === 0) {
-            noStockItems++;
+        // Skip RET/RETF variants - only count base items
+        if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId)) {
             return;
         }
         
-        // Count available items
-            availableCount++;
+        // Count total base items (this should match table count)
+        totalItems++;
         
-        // Consider items with quantity less than 10 as low stock
-        if (quantity < 10) {
+        const quantity = parseInt(item.quantity || 0);
+        const limitL = parseInt(item.limitL || 0);
+        
+        // Check if item has zero quantity
+        if (quantity <= 0) {
+            noStockItems++;
+        } else if (quantity > limitL) {
+            availableCount++;
+        } else {
             lowStockItems++;
         }
     });
@@ -739,7 +1239,7 @@ function updateSummary() {
     
     // Update summary elements
     underRepairEl.textContent = returnedItemsCount; // This element shows "Items Returned"
-    readyToUseEl.textContent = availableCount;
+    readyToUseEl.textContent = totalItems; // This shows total items (matches table count)
     lowStockEl.textContent = lowStockItems;
     noStockEl.textContent = noStockItems;
 } 

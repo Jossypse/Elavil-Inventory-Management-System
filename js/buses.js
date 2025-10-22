@@ -32,6 +32,25 @@
 
 	const database = firebase.database();
 	const busesRef = database.ref('Buses');
+	
+	// Generate activity ID using bus ID + counter
+	async function generateActivityId(activitiesRef, busId) {
+		let baseActivityId = busId;
+		let counter = 1;
+		let candidateId = `${baseActivityId}-${counter}`;
+		
+		// Check if this activity ID already exists
+		while (true) {
+			const existsSnap = await activitiesRef.child(candidateId).once('value');
+			if (!existsSnap.exists()) {
+				break;
+			}
+			counter++;
+			candidateId = `${baseActivityId}-${counter}`;
+		}
+		
+		return candidateId;
+	}
 
 	const form = document.getElementById('bus-form');
 	const hiddenId = document.getElementById('bus-id');
@@ -160,11 +179,11 @@
 		pageItems.forEach(bus => {
 			const tr = document.createElement('tr');
 			tr.innerHTML = `
-				<td>${escapeHtml(bus.busNumber || '')}</td>
-				<td>${escapeHtml(bus.plateNumber || '')}</td>
-				<td>${escapeHtml(bus.acquiredDate || '')}</td>
-				<td>${escapeHtml(bus.notes || '')}</td>
-				<td>
+				<td data-label="Bus Number">${escapeHtml(bus.busNumber || '')}</td>
+				<td data-label="Plate Number">${escapeHtml(bus.plateNumber || '')}</td>
+				<td data-label="Acquired Date">${escapeHtml(bus.acquiredDate || '')}</td>
+				<td data-label="Notes">${escapeHtml(bus.notes || '')}</td>
+				<td data-label="Actions">
 					<button class="action-btn view-btn" data-action="edit" data-id="${bus.id}"><i class="fas fa-edit"></i> Edit</button>
 					<button class="action-btn danger" data-action="delete" data-id="${bus.id}"><i class="fas fa-trash"></i> Delete</button>
 				</td>
@@ -184,6 +203,26 @@
 		}
 	}
 
+	// Render skeleton placeholder rows to preserve layout during loading
+	function renderSkeletonRows(tbody, columns, rows) {
+		if (!tbody) return;
+		const frag = document.createDocumentFragment();
+		for (let r = 0; r < rows; r++) {
+			const tr = document.createElement('tr');
+			tr.className = 'skeleton-row';
+			for (let c = 0; c < columns; c++) {
+				const td = document.createElement('td');
+				const bar = document.createElement('span');
+				bar.className = 'skeleton';
+				td.appendChild(bar);
+				tr.appendChild(td);
+			}
+			frag.appendChild(tr);
+		}
+		tbody.innerHTML = '';
+		tbody.appendChild(frag);
+	}
+
 	function escapeHtml(str) {
 		str = String(str || '');
 		return str.replace(/[&<>\"]+/g, function(s) {
@@ -200,6 +239,10 @@
 		if (searchInput) searchInput.value = '';
 		renderBuses(latest, '');
 	});
+
+	// Initial skeletons on page load
+	if (tableContainer) tableContainer.style.display = 'block';
+	if (tableBody) renderSkeletonRows(tableBody, 5, 8);
 
 	form.addEventListener('submit', function(e) {
 		e.preventDefault();
@@ -253,16 +296,57 @@
 			}
 		} else {
 			// Creating new bus with custom key equal to busNumber
-			busesRef.child(payload.busNumber).once('value', function(snap) {
+			busesRef.child(payload.busNumber).once('value', async function(snap) {
 				if (snap.exists()) {
 					alert('Bus number already exists.');
 					return;
 				}
-				busesRef.child(payload.busNumber).set(payload, function(err) {
+				busesRef.child(payload.busNumber).set(payload, async function(err) {
 					if (err) {
 						alert('Failed to save bus.');
 						return;
 					}
+					
+					// Save activity record
+					try {
+						const activitiesRef = database.ref('activities');
+						const activityDescription = `Bus ${payload.busNumber} created`;
+						
+						// Generate activity ID using bus number + counter
+						const activityId = await generateActivityId(activitiesRef, payload.busNumber);
+						
+						// Get current user information
+						const userSession = sessionStorage.getItem('elavil_user');
+						let createdBy = 'Unknown User';
+						let createdByRole = 'Unknown Role';
+						
+						if (userSession) {
+							try {
+								const user = JSON.parse(userSession);
+								createdBy = user.fullName || 'Unknown User';
+								if (user.level === 4) {
+									createdByRole = 'Administrator';
+								} else {
+									createdByRole = user.employeeType || 'Unknown Role';
+								}
+							} catch (e) {
+								console.error('Error parsing user session:', e);
+							}
+						}
+						
+						const activityRecord = {
+							time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+							actType: 'Bus',
+							description: activityDescription,
+							user: createdBy,
+							role: createdByRole
+						};
+						
+						await activitiesRef.child(activityId).set(activityRecord);
+					} catch (activityErr) {
+						console.error('Failed to save activity record:', activityErr);
+					}
+					
 					clearForm();
 				});
 			});

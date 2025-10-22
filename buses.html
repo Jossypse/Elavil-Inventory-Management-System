@@ -30,6 +30,9 @@
                 <li class="active">
                     <a href="buses.html"><i class="fas fa-bus"></i> <span>Buses</span></a>
                 </li>
+                <li>
+                    <a href="reports.html"><i class="fas fa-chart-line"></i> <span>Reports</span></a>
+                </li>
                 
             </ul>
         </nav>
@@ -81,18 +84,20 @@
                         <p>No buses found</p>
                     </div>
                     <div id="buses-table-container" style="display: none;">
-                        <table id="buses-table">
-                            <thead>
-                                <tr>
-                                    <th>Bus Number</th>
-                                    <th>Plate Number</th>
-                                    <th>Acquired Date</th>
-                                    <th>Notes</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="buses-table-body"></tbody>
-                        </table>
+                        <div class="table-container">
+                            <table id="buses-table">
+                                <thead>
+                                    <tr>
+                                        <th>Bus Number</th>
+                                        <th>Plate Number</th>
+                                        <th>Acquired Date</th>
+                                        <th>Notes</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="buses-table-body"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
             </main>

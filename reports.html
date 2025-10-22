@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Reports</title>
+    <link rel="stylesheet" href="css/supervisor.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar">
+            <div class="sidebar-header">
+                <h2>Elavil</h2>
+            </div>
+            <ul class="sidebar-menu">
+                <li>
+                    <a href="supervisor.html"><i class="fas fa-boxes"></i> <span>Inventory</span></a>
+                </li>
+                <li>
+                    <a href="requests.html"><i class="fas fa-clipboard-list"></i> <span>Requests</span></a>
+                </li>
+                <li>
+                    <a href="return-requests.html"><i class="fas fa-undo"></i> <span>Return Requests</span></a>
+                </li>
+                <li>
+                    <a href="users.html"><i class="fas fa-users"></i> <span>User Management</span></a>
+                </li>
+                <li>
+                    <a href="buses.html"><i class="fas fa-bus"></i> <span>Buses</span></a>
+                </li>
+                <li class="active">
+                    <a href="reports.html"><i class="fas fa-chart-line"></i> <span>Reports</span></a>
+                </li>
+            </ul>
+        </nav>
+
+        <div class="main-content">
+            <header>
+                <h1>System Reports</h1>
+            </header>
+            
+            <main>
+                <section id="reports-display">
+                    <div class="reports-header">
+                        <h2>Activity Records</h2>
+                        <div class="reports-filters">
+                            <input type="text" id="search-records" placeholder="Search records...">
+                            <select id="activity-filter">
+                                <option value="all">All Activities</option>
+                                <option value="inventory">Inventory</option>
+                                <option value="requests">Requests</option>
+                                <option value="returns">Return Requests</option>
+                                <option value="users">User Management</option>
+                                <option value="buses">Bus Management</option>
+                                <option value="other">Other</option>
+                            </select>
+                            <select id="date-filter">
+                                <option value="all">All Time</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table id="reports-table">
+                            <thead>
+                                <tr>
+                                    <th>No.</th>
+                                    <th>Timestamp</th>
+                                    <th>Activity Type</th>
+                                    <th>Description</th>
+                                    <th>User</th>
+                                    <th>Role</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reports-list">
+                                <!-- Activity records will be populated here by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </main>
+            
+            <footer>
+                <p>&copy; 2025 Elavil Inventory Management System</p>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <!-- Scripts -->
+    <script src="js/auth.js"></script>
+    <script src="js/reports.js"></script>
+</body>
+</html>

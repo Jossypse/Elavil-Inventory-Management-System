@@ -33,6 +33,25 @@
 	const database = firebase.database();
 	const usersRef = database.ref('Users');
 	const busesRef = database.ref('Buses');
+	
+	// Generate activity ID using user ID + counter
+	async function generateActivityId(activitiesRef, userId) {
+		let baseActivityId = userId;
+		let counter = 1;
+		let candidateId = `${baseActivityId}-${counter}`;
+		
+		// Check if this activity ID already exists
+		while (true) {
+			const existsSnap = await activitiesRef.child(candidateId).once('value');
+			if (!existsSnap.exists()) {
+				break;
+			}
+			counter++;
+			candidateId = `${baseActivityId}-${counter}`;
+		}
+		
+		return candidateId;
+	}
 
 	const form = document.getElementById('user-form');
 	const hiddenId = document.getElementById('user-id');
@@ -169,15 +188,15 @@
 		pageItems.forEach(user => {
 			const tr = document.createElement('tr');
 			tr.innerHTML = `
-				<td>${escapeHtml(user.fullName || '')}</td>
-				<td>${escapeHtml(user.username || '')}</td>
-				<td>${escapeHtml(user.contactNumber || '')}</td>
-				<td>${escapeHtml(user.address || '')}</td>
-				<td>${escapeHtml(String(user.age || ''))}</td>
-				<td>${escapeHtml(capitalize(user.employeeType || ''))}</td>
-				<td>${escapeHtml(String(user.level || ''))}</td>
-				<td>${escapeHtml(String(user.assignedBus || 'N/A'))}</td>
-				<td>
+				<td data-label="Full Name">${escapeHtml(user.fullName || '')}</td>
+				<td data-label="Username">${escapeHtml(user.username || '')}</td>
+				<td data-label="Contact">${escapeHtml(user.contactNumber || '')}</td>
+				<td data-label="Address">${escapeHtml(user.address || '')}</td>
+				<td data-label="Age">${escapeHtml(String(user.age || ''))}</td>
+				<td data-label="Type">${escapeHtml(capitalize(user.employeeType || ''))}</td>
+				<td data-label="Level">${escapeHtml(String(user.level || ''))}</td>
+				<td data-label="Assigned Bus">${escapeHtml(String(user.assignedBus || 'N/A'))}</td>
+				<td data-label="Actions">
 					<button class="action-btn view-btn" data-action="edit" data-id="${user.id}"><i class="fas fa-edit"></i> Edit</button>
 					<button class="action-btn danger" data-action="delete" data-id="${user.id}"><i class="fas fa-trash"></i> Delete</button>
 				</td>
@@ -195,6 +214,26 @@
 			prev.disabled = currentPage === 1;
 			next.disabled = currentPage === totalPages;
 		}
+	}
+
+	// Render skeleton placeholder rows to preserve layout during loading
+	function renderSkeletonRows(tbody, columns, rows) {
+		if (!tbody) return;
+		const frag = document.createDocumentFragment();
+		for (let r = 0; r < rows; r++) {
+			const tr = document.createElement('tr');
+			tr.className = 'skeleton-row';
+			for (let c = 0; c < columns; c++) {
+				const td = document.createElement('td');
+				const bar = document.createElement('span');
+				bar.className = 'skeleton';
+				td.appendChild(bar);
+				tr.appendChild(td);
+			}
+			frag.appendChild(tr);
+		}
+		tbody.innerHTML = '';
+		tbody.appendChild(frag);
 	}
 
 	function escapeHtml(str) {
@@ -240,6 +279,10 @@
 		latestUsers = toArrayFromSnapshot(snapshot);
 		renderUsersFromFirebase(latestUsers, searchInput.value);
 	});
+
+	// Initial skeletons on page load
+	if (tableContainer) tableContainer.style.display = 'block';
+	if (tableBody) renderSkeletonRows(tableBody, 9, 8);
 
 	// Populate buses for assignment dropdown
 	busesRef.on('value', function(snapshot) {
@@ -306,7 +349,7 @@
 						alert('Username already taken. Please choose another.');
 						return;
 					}
-					usersRef.child(payload.username).set(payload, function(err) {
+					usersRef.child(payload.username).set(payload, async function(err) {
 						if (err) {
 							alert('Failed to save user.');
 							return;
@@ -314,6 +357,47 @@
 						if (payload.assignedBus) {
 							busesRef.child(payload.assignedBus + '/AssignedPersonnel/' + payload.username).set(true);
 						}
+						
+						// Save activity record
+						try {
+							const activitiesRef = database.ref('activities');
+							const activityDescription = `User ${payload.fullName} created`;
+							
+							// Generate activity ID using username + counter
+							const activityId = await generateActivityId(activitiesRef, payload.username);
+							
+							// Get current user information
+							const userSession = sessionStorage.getItem('elavil_user');
+							let createdBy = 'Unknown User';
+							let createdByRole = 'Unknown Role';
+							
+							if (userSession) {
+								try {
+									const user = JSON.parse(userSession);
+									createdBy = user.fullName || 'Unknown User';
+									if (user.level === 4) {
+										createdByRole = 'Administrator';
+									} else {
+										createdByRole = user.employeeType || 'Unknown Role';
+									}
+								} catch (e) {
+									console.error('Error parsing user session:', e);
+								}
+							}
+							
+							const activityRecord = {
+								time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+								actType: 'User',
+								description: activityDescription,
+								user: createdBy,
+								role: createdByRole
+							};
+							
+							await activitiesRef.child(activityId).set(activityRecord);
+						} catch (activityErr) {
+							console.error('Failed to save activity record:', activityErr);
+						}
+						
 						clearForm();
 					});
 				} else {

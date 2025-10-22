@@ -15,11 +15,20 @@
 
     function checkAuthentication() {
         const user = getCurrentUser();
-        if (!user || (user.level !== 3 && user.level !== 4)) {
-            // Redirect to login page
+        
+        if (!user) {
             window.location.href = 'index.html';
             return false;
         }
+        
+        // Check if level is a valid number
+        const userLevel = parseInt(user.level);
+        
+        if (userLevel !== 3 && userLevel !== 4) {
+            window.location.href = 'index.html';
+            return false;
+        }
+        
         return true;
     }
 
@@ -32,29 +41,28 @@
 
         // Find all sidebar menu items
         const menuItems = sidebar.querySelectorAll('.sidebar-menu li');
+        const userLevel = parseInt(user.level);
         
         menuItems.forEach(item => {
             const link = item.querySelector('a');
             if (!link) return;
 
             const href = link.getAttribute('href');
-            const isActive = item.classList.contains('active');
             
-            // Hide/show items based on user level
-            if (href === 'users.html' || href === 'buses.html') {
-                // Only level 4 (admin) can see users and buses
-                if (user.level === 4) {
+            // Show/hide items based on user level
+            if (userLevel === 3) {
+                // Level 3 (Supervisor) - Show only: supervisor, requests, return-requests
+                if (href === 'supervisor.html' || href === 'requests.html' || href === 'return-requests.html') {
                     item.style.display = 'block';
                 } else {
                     item.style.display = 'none';
                 }
-            } else if (href === 'requests.html' || href === 'supervisor.html' || href === 'return-requests.html') {
-                // Only level 3 (supervisor) can see requests, supervisor, and return requests pages
-                if (user.level === 3) {
-                    item.style.display = 'block';
-                } else {
-                    item.style.display = 'none';
-                }
+            } else if (userLevel === 4) {
+                // Level 4 (Admin) - Show all pages including reports
+                item.style.display = 'block';
+            } else {
+                // Other levels - Hide all
+                item.style.display = 'none';
             }
         });
     }
@@ -121,6 +129,7 @@
         if (checkAuthentication()) {
             updateSidebarForUserLevel();
             addUserInfoToHeader();
+            initSidebarBurger();
         }
     }
 
@@ -137,4 +146,26 @@
         checkAuthentication,
         logout
     };
+
+    // Sidebar burger initialization (applies to all pages with a header)
+    function initSidebarBurger() {
+        const header = document.querySelector('header');
+        if (!header) return;
+        // Avoid duplicate button
+        if (header.querySelector('.burger-btn')) return;
+        const btn = document.createElement('button');
+        btn.className = 'burger-btn';
+        btn.setAttribute('aria-label', 'Toggle sidebar');
+        btn.innerHTML = '<i class="fas fa-bars"></i>';
+        header.appendChild(btn);
+
+        // Apply persisted state
+        const collapsed = localStorage.getItem('elavil_sidebar_collapsed') === '1';
+        if (collapsed) document.body.classList.add('sidebar-collapsed');
+
+        btn.addEventListener('click', function(){
+            const isCollapsed = document.body.classList.toggle('sidebar-collapsed');
+            localStorage.setItem('elavil_sidebar_collapsed', isCollapsed ? '1' : '0');
+        });
+    }
 })();
