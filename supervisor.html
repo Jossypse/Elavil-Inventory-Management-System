@@ -66,6 +66,24 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Tab Navigation -->
+                    <div class="inventory-tabs">
+                        <button class="tab-button active" data-tab="brand-new" onclick="switchInventoryTab('brand-new')">
+                            <i class="fas fa-box"></i> Brand New
+                        </button>
+                        <button class="tab-button" data-tab="returned" onclick="switchInventoryTab('returned')">
+                            <i class="fas fa-undo"></i> Returned (RET)
+                        </button>
+                        <button class="tab-button" data-tab="under-repair" onclick="switchInventoryTab('under-repair')">
+                            <i class="fas fa-tools"></i> Under Repair (RETR)
+                        </button>
+                        <button class="tab-button" data-tab="repaired" onclick="switchInventoryTab('repaired')">
+                            <i class="fas fa-check-circle"></i> Repaired (RETF)
+                        </button>
+                        <button class="tab-button" data-tab="disposed" onclick="switchInventoryTab('disposed')">
+                            <i class="fas fa-trash-alt"></i> Disposed (RETD)
+                        </button>
+                    </div>
                     <div class="inventory-filters">
                         <input type="text" id="search-items" placeholder="Search items...">
                         <select id="type-filter">
@@ -79,22 +97,25 @@
                             <option value="under_repair">Under Repair</option>
                             <option value="returned">Returned</option>
                             <option value="repaired">Repaired</option>
+                            <option value="disposed">Disposed</option>
                         </select>
                     </div>
                     <div class="table-container">
                         <table id="inventory-table">
                             <thead>
                                 <tr>
-                                    <th>No.</th>
-                                    <th>Brand</th>
-                                    <th>Manufacturer</th>
-                                    <th>Type</th>
-                                    <th>Quantity</th>
-                                    <th>Unit</th>
-                                    <th>SIZE/SPECIFICATION</th>
-                                    <th>Supplier Name</th>
-                                    <th>CONTACT NUMBER</th>
-                                    <th>Status</th>
+                                     <th>No. <button class="minimize-btn" onclick="toggleColumn(1)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Brand <button class="minimize-btn" onclick="toggleColumn(2)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Manufacturer <button class="minimize-btn" onclick="toggleColumn(3)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Type <button class="minimize-btn" onclick="toggleColumn(4)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Quantity <button class="minimize-btn" onclick="toggleColumn(5)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Unit <button class="minimize-btn" onclick="toggleColumn(6)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Size <button class="minimize-btn" onclick="toggleColumn(7)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Description <button class="minimize-btn" onclick="toggleColumn(8)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Supplier Name <button class="minimize-btn" onclick="toggleColumn(9)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Contact Number <button class="minimize-btn" onclick="toggleColumn(10)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th>Status <button class="minimize-btn" onclick="toggleColumn(11)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
+                                     <th id="remarks-header">Remarks <button class="minimize-btn" onclick="toggleColumn(12)" title="Minimize column"><i class="fas fa-minus minimize-icon"></i><i class="fas fa-plus maximize-icon" style="display:none;"></i></button></th>
                                 </tr>
                             </thead>
                             <tbody id="inventory-list">
@@ -141,7 +162,7 @@
                                     <input type="number" id="inv-quantity" min="1" step="1" required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="inv-restock">ReStock No.</label>
+                                    <label for="inv-restock">Threshold</label>
                                     <input type="number" id="inv-restock" min="1" step="1" placeholder="e.g., 5" required>
                                 </div>
                                 <div class="form-group">
@@ -155,9 +176,15 @@
                                     </select>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label for="inv-description">Size/Specification</label>
-                                <input type="text" id="inv-description" placeholder="">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inv-size">Size</label>
+                                    <input type="text" id="inv-size" placeholder="">
+                                </div>
+                                <div class="form-group">
+                                    <label for="inv-description">Description</label>
+                                    <input type="text" id="inv-description" placeholder="product Description">
+                                </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
@@ -196,6 +223,29 @@
                             </div>
                         </form>
                         <p id="adjust-qty-note" style="margin-top:10px;color:#7f8c8d;"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mark as Repaired Modal -->
+            <div id="mark-repaired-modal" class="modal" style="display:none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Mark as Repaired</h2>
+                        <span class="close-modal" id="close-mark-repaired">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <form id="mark-repaired-form">
+                            <div class="form-group">
+                                <label for="repaired-qty-input">Quantity to Mark as Repaired</label>
+                                <input type="number" id="repaired-qty-input" min="1" step="1" required>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary">Mark as Repaired</button>
+                                <button type="button" class="secondary" id="cancel-mark-repaired">Cancel</button>
+                            </div>
+                        </form>
+                        <p id="mark-repaired-note" style="margin-top:10px;color:#7f8c8d;"></p>
                     </div>
                 </div>
             </div>

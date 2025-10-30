@@ -199,6 +199,57 @@ th {
     z-index: 10;
 }
 
+/* Minimize button styles */
+.minimize-btn {
+    background: transparent;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin: 0;
+    cursor: pointer;
+    font-size: 8px;
+    color: #6c757d;
+    transition: all 0.2s ease;
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+}
+
+.minimize-btn:hover {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+    color: #495057;
+}
+
+.minimize-btn .minimize-icon,
+.minimize-btn .maximize-icon {
+    display: inline-block;
+    line-height: 1;
+}
+
+/* Ensure button is visible in minimized columns */
+.col-1-minimized th:nth-child(1),
+.col-2-minimized th:nth-child(2),
+.col-3-minimized th:nth-child(3),
+.col-4-minimized th:nth-child(4),
+.col-5-minimized th:nth-child(5),
+.col-6-minimized th:nth-child(6),
+.col-7-minimized th:nth-child(7),
+.col-8-minimized th:nth-child(8),
+.col-9-minimized th:nth-child(9),
+.col-10-minimized th:nth-child(10),
+.col-11-minimized th:nth-child(11) {
+    overflow: visible;
+}
+
+/* Keep button visible in minimized data cells */
+td .minimize-btn {
+    display: none; /* Hide button in data rows, only show in header */
+}
+
 th:last-child, td:last-child {
     border-right: none;
 }
@@ -210,10 +261,11 @@ th:nth-child(3), td:nth-child(3) { width: auto; min-width: 120px; } /* Manufactu
 th:nth-child(4), td:nth-child(4) { width: auto; min-width: 120px; } /* Type */
 th:nth-child(5), td:nth-child(5) { width: auto; min-width: 80px; }   /* Quantity */
 th:nth-child(6), td:nth-child(6) { width: auto; min-width: 80px; }   /* Unit */
-th:nth-child(7), td:nth-child(7) { width: auto; min-width: 200px; }  /* Description */
-th:nth-child(8), td:nth-child(8) { width: auto; min-width: 120px; }  /* Supplier Name */
-th:nth-child(9), td:nth-child(9) { width: auto; min-width: 120px; }  /* Supplier Number */
-th:nth-child(10), td:nth-child(10) { width: auto; min-width: 120px; } /* Status */
+th:nth-child(7), td:nth-child(7) { width: auto; min-width: 100px; }  /* Size */
+th:nth-child(8), td:nth-child(8) { width: auto; min-width: 200px; }  /* Description */
+th:nth-child(9), td:nth-child(9) { width: auto; min-width: 120px; }  /* Supplier Name */
+th:nth-child(10), td:nth-child(10) { width: auto; min-width: 120px; }  /* Supplier Number */
+th:nth-child(11), td:nth-child(11) { width: auto; min-width: 120px; } /* Status */
 
 tbody tr {
     transition: background-color 0.2s ease;
@@ -348,6 +400,46 @@ tbody tr.ret-item:hover td {
 
 .inventory-header h2 {
     margin: 0;
+}
+
+/* Inventory Tabs */
+.inventory-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 8px;
+}
+
+.tab-button {
+    background: transparent;
+    border: none;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #6c757d;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tab-button:hover {
+    color: #495057;
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+.tab-button.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+    background-color: transparent;
+}
+
+.tab-button i {
+    font-size: 14px;
 }
 
 /* Compact summary cards */
@@ -921,14 +1013,14 @@ section h2 {
 .variant-content {
     position: absolute;
     top: 100%;
-    left: -100px;
+    left: -180px;
     background: white;
     border: 1px solid #dee2e6;
     border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    min-width: 180px;
+    min-width: 200px;
     width: max-content;
-    max-width: 250px;
+    max-width: 350px;
     z-index: 1000;
     margin-top: 2px;
 }

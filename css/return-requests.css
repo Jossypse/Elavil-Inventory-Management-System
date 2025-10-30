@@ -441,6 +441,82 @@
     font-size: 0.9rem;
 }
 
+/* Loading Overlay Styles */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    backdrop-filter: blur(4px);
+}
+
+.loading-overlay.show {
+    display: flex;
+}
+
+.loading-content {
+    background: white;
+    padding: 3rem;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    min-width: 300px;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.loading-spinner {
+    margin-bottom: 1rem;
+}
+
+.loading-spinner i {
+    color: #007bff;
+}
+
+.loading-success {
+    margin-bottom: 1rem;
+    animation: checkmark 0.5s ease-out;
+}
+
+@keyframes checkmark {
+    0% {
+        transform: scale(0);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.loading-success i {
+    color: #28a745;
+}
+
+#loading-text {
+    color: #333;
+    font-size: 1.1rem;
+    margin-top: 1rem;
+    font-weight: 500;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
     .filter-group {
@@ -471,5 +547,10 @@
     .success-button,
     .danger-button {
         width: 100%;
+    }
+    
+    .loading-content {
+        min-width: 250px;
+        padding: 2rem;
     }
 }

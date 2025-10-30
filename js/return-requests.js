@@ -69,6 +69,12 @@
     const acceptBtn = document.getElementById('accept-return-request');
     const rejectBtn = document.getElementById('reject-return-request');
     const actionButtons = document.getElementById('return-action-buttons');
+    
+    // Loading overlay elements
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const loadingSuccess = document.getElementById('loading-success');
+    const loadingText = document.getElementById('loading-text');
 
     // Stats elements
     const pendingCount = document.getElementById('pending-count');
@@ -80,6 +86,28 @@
     let currentPage = 1;
     const itemsPerPage = 5;
     let filteredRequests = [];
+
+    // Loading screen functions
+    function showLoadingScreen(message) {
+        loadingText.textContent = message || 'Processing return request...';
+        loadingSpinner.style.display = 'block';
+        loadingSuccess.style.display = 'none';
+        loadingOverlay.classList.add('show');
+    }
+
+    function showLoadingSuccess(message) {
+        loadingText.textContent = message || 'Return request processed successfully!';
+        loadingSpinner.style.display = 'none';
+        loadingSuccess.style.display = 'block';
+    }
+
+    function hideLoadingScreen() {
+        setTimeout(() => {
+            loadingOverlay.classList.remove('show');
+            loadingSpinner.style.display = 'block';
+            loadingSuccess.style.display = 'none';
+        }, 1000); // Wait 1 second before hiding to show the check mark
+    }
 
     // Function to populate date filter with unique dates from return requests
     function populateDateFilter(requests) {
@@ -580,17 +608,43 @@
         if (!partsSnap.exists()) throw new Error('No parts to accept');
         const partsMap = partsSnap.val();
 
-        // For each part: upsert InventoryData/{partId}-RET (add quantity if exists)
+        // Determine the suffix based on remarks
+        const remarks = String(request.remarks || '').trim();
+        let suffix = 'RET'; // Default suffix
+        if (remarks.toLowerCase() === 'disposed') {
+            suffix = 'RETD';
+        } else if (remarks.toLowerCase() === 'repairable') {
+            suffix = 'RETR';
+        } else if (remarks.toLowerCase() === 'return') {
+            suffix = 'RET';
+        }
+
+        // For each part: upsert InventoryData/{partId}-{suffix} (add quantity if exists)
         await Promise.all(Object.keys(partsMap).map(async partId => {
             const part = partsMap[partId] || {};
             const addQty = Number(part.quantity || 0);
-            const manufacturer = part.manufacturer || '';
-            const type = part.type || '';
-            const brand = part.brand || part.manufacturer || '';
-            const unit = part.quantityUnit || part.unit || '';
-            const desc = part.description || '';
 
-            const retRef = database.ref(`InventoryData/${partId}-RET`);
+            // Fetch the ORIGINAL part data from InventoryData (without suffix)
+            const originalPartRef = database.ref(`InventoryData/${partId}`);
+            const originalPartSnap = await originalPartRef.once('value');
+            const originalPart = originalPartSnap.exists() ? originalPartSnap.val() : {};
+
+            // Use data from the ORIGINAL part to maintain consistency
+            const manufacturer = originalPart.manufacturer || part.manufacturer || '';
+            const type = originalPart.type || part.type || '';
+            const brand = originalPart.brand || part.brand || part.manufacturer || '';
+            const unit = originalPart.quantityUnit || part.quantityUnit || part.unit || '';
+            const desc = originalPart.description || part.description || '';
+            const limitL = originalPart.limitL || 0;
+            const supplierName = originalPart.supplierName || '';
+            const supplierNumber = originalPart.supplierNumber || '';
+            const size = originalPart.size || part.size || '';
+
+            const retRef = database.ref(`InventoryData/${partId}-${suffix}`);
+
+            // Check if the returned part already exists
+            const existingSnap = await retRef.once('value');
+            const existing = existingSnap.exists() ? existingSnap.val() : {};
 
             // Ensure metadata fields are set/updated (non-destructive) and increase quantity atomically
             // 1) Transaction on quantity
@@ -599,17 +653,18 @@
                 return curr + addQty;
             });
 
-            // 2) Update other fields (do not override existing non-empty fields unnecessarily)
-            const metaSnap = await retRef.once('value');
-            const existing = metaSnap.val() || {};
+            // 2) Update other fields - preserve existing fields but fill in missing ones from original
             const payload = {
                 brand: existing.brand || brand,
                 manufacturer: existing.manufacturer || manufacturer,
                 type: existing.type || type,
                 quantityUnit: existing.quantityUnit || unit,
                 description: existing.description || desc,
-                supplierName: existing.supplierName || (request.requestedBy || ''),
-                supplierNumber: existing.supplierNumber || (request.requesterContact || ''),
+                limitL: existing.limitL || limitL,
+                supplierName: existing.supplierName || supplierName,
+                supplierNumber: existing.supplierNumber || supplierNumber,
+                size: existing.size || size,
+                note: existing.note || (request.note || ''),
                 lastUpdated: Date.now()
             };
             if (!existing.createdAt) payload.createdAt = Date.now();
@@ -661,8 +716,12 @@
         
         await activitiesRef.child(activityId).set(activityRecord);
 
-        alert('Return accepted and inventory updated');
+        // Show success animation
+        showLoadingSuccess('Return accepted and inventory updated!');
+        // Hide modal
         modal.style.display = 'none';
+        // Hide loading screen after delay
+        hideLoadingScreen();
     }
 
     function loadReturnRequests() {
@@ -786,8 +845,12 @@
 
     acceptBtn.addEventListener('click', () => {
         if (confirm('Are you sure you want to accept this return request?')) {
+            // Show loading screen
+            showLoadingScreen('Accepting return request...');
+            
             handleAcceptReturnRequest().catch(err => {
                 console.error('Accept processing failed:', err);
+                loadingOverlay.classList.remove('show');
                 alert('Failed to process acceptance. Please try again.');
             });
         }

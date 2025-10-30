@@ -60,6 +60,7 @@
 	const password = document.getElementById('password');
 	const contactNumber = document.getElementById('contactNumber');
 	const address = document.getElementById('address');
+	const birthdate = document.getElementById('birthdate');
 	const age = document.getElementById('age');
 	const employeeType = document.getElementById('employeeType');
 	const assignedBus = document.getElementById('assignedBus');
@@ -111,11 +112,29 @@
 		if (!password.value.trim()) return 'Password is required';
 		if (!contactNumber.value.trim()) return 'Contact number is required';
 		if (!address.value.trim()) return 'Address is required';
-		if (!age.value || Number(age.value) < 18) return 'Age must be 18+';
+		if (!birthdate.value) return 'Birthdate is required';
+		const computed = computeAgeFromBirthdate(birthdate.value);
+		if (computed < 18) return 'User must be at least 18 years old';
+		if (!age.value || Number(age.value) !== computed) {
+			age.value = computed;
+		}
 		if (!employeeType.value) return 'Employee type is required';
 		const type = employeeType.value;
 		if ((type === 'driver' || type === 'conductor') && !assignedBus.value) return 'Assigned bus is required for drivers and conductors';
 		return '';
+	}
+
+	function computeAgeFromBirthdate(dateStr) {
+		const dob = new Date(dateStr);
+		if (Number.isNaN(dob.getTime())) return 0;
+		const today = new Date();
+		let years = today.getFullYear() - dob.getFullYear();
+		const m = today.getMonth() - dob.getMonth();
+		if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+			years--;
+		}
+
+		return years;
 	}
 
 	function clearForm() {
@@ -133,7 +152,8 @@
 		password.value = user.password || '';
 		contactNumber.value = user.contactNumber || '';
 		address.value = user.address || '';
-		age.value = user.age || '';
+		birthdate.value = user.birthdate || '';
+		age.value = user.age || (user.birthdate ? computeAgeFromBirthdate(user.birthdate) : '');
 		employeeType.value = user.employeeType || '';
 		const type = employeeType.value;
 		if (type === 'driver' || type === 'conductor') {
@@ -192,6 +212,7 @@
 				<td data-label="Username">${escapeHtml(user.username || '')}</td>
 				<td data-label="Contact">${escapeHtml(user.contactNumber || '')}</td>
 				<td data-label="Address">${escapeHtml(user.address || '')}</td>
+				<td data-label="Birthdate">${escapeHtml(String(user.birthdate || ''))}</td>
 				<td data-label="Age">${escapeHtml(String(user.age || ''))}</td>
 				<td data-label="Type">${escapeHtml(capitalize(user.employeeType || ''))}</td>
 				<td data-label="Level">${escapeHtml(String(user.level || ''))}</td>
@@ -282,7 +303,7 @@
 
 	// Initial skeletons on page load
 	if (tableContainer) tableContainer.style.display = 'block';
-	if (tableBody) renderSkeletonRows(tableBody, 9, 8);
+	if (tableBody) renderSkeletonRows(tableBody, 10, 8);
 
 	// Populate buses for assignment dropdown
 	busesRef.on('value', function(snapshot) {
@@ -310,6 +331,12 @@
 		}
 	});
 
+	// Auto-compute age when birthdate changes
+	birthdate.addEventListener('change', function() {
+		const computed = computeAgeFromBirthdate(birthdate.value);
+		age.value = computed > 0 ? computed : '';
+	});
+
 	form.addEventListener('submit', function(e) {
 		e.preventDefault();
 		const error = validateForm();
@@ -325,6 +352,7 @@
 			password: password.value, // Note: plaintext for demo only
 			contactNumber: contactNumber.value.trim(),
 			address: address.value.trim(),
+			birthdate: birthdate.value,
 			age: Number(age.value),
 			employeeType: employeeType.value,
 			level: computedLevel,

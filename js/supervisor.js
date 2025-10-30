@@ -32,6 +32,7 @@ const sidebarItems = document.querySelectorAll('.sidebar-menu li');
 let currentPage = 1;
 const itemsPerPage = 5;
 let filteredItems = [];
+let currentTab = 'brand-new';
 
 // Inventory data storage
 let inventoryData = {};
@@ -91,6 +92,24 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Create and add pagination controls
     createPaginationControls();
+    
+    // Add double-click event to table headers to maximize minimized columns
+    const table = document.getElementById('inventory-table');
+    if (table) {
+        const headerRow = table.querySelector('thead tr');
+        if (headerRow) {
+            headerRow.addEventListener('dblclick', function(e) {
+                const th = e.target.closest('th');
+                if (th && th.cellIndex !== null) {
+                    const columnIndex = th.cellIndex + 1; // Convert to 1-based index
+                    // Check if column is minimized
+                    if (table.classList.contains(`col-${columnIndex}-minimized`)) {
+                        toggleColumn(columnIndex);
+                    }
+                }
+            });
+        }
+    }
 
     // Wire Add Inventory FAB and modal
     const fab = document.getElementById('add-inventory-fab');
@@ -133,6 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const quantityStr = document.getElementById('inv-quantity').value.trim();
             const restockStr = (document.getElementById('inv-restock') && document.getElementById('inv-restock').value.trim()) || '';
             const unit = document.getElementById('inv-unit').value;
+            const size = document.getElementById('inv-size').value.trim();
             const description = document.getElementById('inv-description').value.trim();
             const supplierName = document.getElementById('inv-supplier-name').value.trim();
             const supplierNumber = (document.getElementById('inv-supplier-number').value || '').replace(/[^0-9]/g, '').slice(0, 11);
@@ -181,6 +201,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 quantity: qty,
                 limitL,
                 quantityUnit: unit,
+                size,
                 description,
                 supplierName,
                 supplierNumber,
@@ -298,6 +319,133 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // Wire Mark as Repaired modal handlers
+    const markRepairedModal = document.getElementById('mark-repaired-modal');
+    const markRepairedClose = document.getElementById('close-mark-repaired');
+    const markRepairedCancel = document.getElementById('cancel-mark-repaired');
+    const markRepairedForm = document.getElementById('mark-repaired-form');
+    const markRepairedInput = document.getElementById('repaired-qty-input');
+    const markRepairedNote = document.getElementById('mark-repaired-note');
+
+    window._markRepairedTargetId = null;
+    function closeMarkRepaired() { 
+        if (markRepairedModal) { markRepairedModal.style.display = 'none'; } 
+        window._markRepairedTargetId = null; 
+        if (markRepairedForm) markRepairedForm.reset(); 
+    }
+    
+    if (markRepairedModal && markRepairedClose && markRepairedCancel && markRepairedForm && markRepairedInput) {
+        markRepairedClose.addEventListener('click', closeMarkRepaired);
+        markRepairedCancel.addEventListener('click', closeMarkRepaired);
+        window.addEventListener('click', (e) => { if (e.target === markRepairedModal) closeMarkRepaired(); });
+        
+        markRepairedForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const qtyStr = markRepairedInput.value.trim();
+            const qty = Number(qtyStr);
+            if (!Number.isInteger(qty) || qty <= 0) { 
+                alert('Enter a whole number greater than 0.'); 
+                return; 
+            }
+            
+            const id = window._markRepairedTargetId;
+            if (!id) return;
+            
+            try {
+                // Get the item to check quantity
+                const itemSnapshot = await inventoryRef.child(id).once('value');
+                const item = itemSnapshot.val();
+                const currentQty = Number(item.quantity || 0);
+                
+                if (qty > currentQty) {
+                    alert(`Cannot mark more items as repaired than available (${currentQty}).`);
+                    return;
+                }
+                
+                // If partial quantity, create new RETF item and reduce RETR item
+                if (qty < currentQty) {
+                    // Reduce RETR quantity
+                    await inventoryRef.child(id).child('quantity').transaction(current => {
+                        const curr = Number(current || 0);
+                        return curr - qty;
+                    });
+                    
+                    // Get base item ID
+                    const baseId = id.replace(/-(RETR)(?:-\d+)?$/i, '');
+                    
+                    // Create RETF item
+                    const retfId = `${baseId}-RETF`;
+                    const retfRef = inventoryRef.child(retfId);
+                    const retfSnap = await retfRef.once('value');
+                    
+                    if (retfSnap.exists()) {
+                        // Add to existing RETF item
+                        await retfRef.child('quantity').transaction(current => {
+                            const curr = Number(current || 0);
+                            return curr + qty;
+                        });
+                    } else {
+                        // Create new RETF item
+                        const retfData = {
+                            ...item,
+                            quantity: qty,
+                            lastUpdated: Date.now()
+                        };
+                        await retfRef.set(retfData);
+                    }
+                } else {
+                    // Mark all as repaired - transition entire item
+                    await transitionItemStatus(id, 'RETF');
+                }
+                
+                // Get current user info for activity
+                const userSession = sessionStorage.getItem('elavil_user');
+                let repairedBy = 'Unknown User';
+                let repairedByRole = 'Unknown Role';
+                
+                if (userSession) {
+                    try {
+                        const user = JSON.parse(userSession);
+                        repairedBy = user.fullName || 'Unknown User';
+                        if (user.level === 3) {
+                            repairedByRole = 'Supervisor';
+                        } else if (user.level === 4) {
+                            repairedByRole = 'Administrator';
+                        } else {
+                            repairedByRole = user.employeeType || 'Unknown Role';
+                        }
+                    } catch (e) {
+                        console.error('Error parsing user session:', e);
+                    }
+                }
+                
+                // Record activity
+                const activitiesRef = database.ref('activities');
+                const activityDescription = `Marked ${qty} ${item.brand} ${item.type} as repaired`;
+                
+                // Generate activity ID
+                const targetId = qty < currentQty ? `${id.replace(/-(RETR)(?:-\d+)?$/i, '')}-RETF` : id;
+                const activityId = await generateActivityId(activitiesRef, targetId);
+                
+                const activityRecord = {
+                    time: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14),
+                    actType: 'Inventory',
+                    description: activityDescription,
+                    user: repairedBy,
+                    role: repairedByRole
+                };
+                
+                await activitiesRef.child(activityId).set(activityRecord);
+                
+                alert('Items marked as repaired successfully!');
+                closeMarkRepaired();
+            } catch (err) {
+                console.error('Mark as repaired failed:', err);
+                alert('Failed to mark as repaired.');
+            }
+        });
+    }
 });
 
 function openAdjustQtyModal(itemId, item) {
@@ -309,6 +457,17 @@ function openAdjustQtyModal(itemId, item) {
         adjNote.textContent = `Adding quantity to ${item.brand || ''} ${item.type || ''} (${item.manufacturer || ''})`;
     }
     adjModal.style.display = 'flex';
+}
+
+function openMarkRepairedModal(itemId, item) {
+    const modal = document.getElementById('mark-repaired-modal');
+    const note = document.getElementById('mark-repaired-note');
+    if (!modal) return;
+    window._markRepairedTargetId = itemId;
+    if (note) {
+        note.textContent = `Marking as repaired: ${item.brand || ''} ${item.type || ''} (${item.manufacturer || ''})`;
+    }
+    modal.style.display = 'flex';
 }
 
 // Create pagination controls
@@ -479,14 +638,37 @@ function filterInventory() {
     const typeValue = typeFilter.value;
     const statusValue = (statusFilterEl && statusFilterEl.value) || 'all';
     
-    // Filter the items based on search and type filter, but exclude RET/RETR/RETF variants
+    // Filter the items based on current tab, search, and type filter
     filteredItems = Object.entries(inventoryData)
         .filter(([itemId, item]) => {
             const upperId = String(itemId).toUpperCase();
             
-            // Skip RET/RETR/RETF variants - only include base items in main filtering
-            if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETR(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId)) {
-                return false;
+            // Filter by tab
+            if (currentTab === 'brand-new') {
+                // Only show base items (no RET/RETR/RETF/RETD suffix)
+                if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETR(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId) || /-RETD(?:-\d+)?$/i.test(upperId)) {
+                    return false;
+                }
+            } else if (currentTab === 'returned') {
+                // Only show RET items
+                if (!/-RET(?:-\d+)?$/i.test(upperId)) {
+                    return false;
+                }
+            } else if (currentTab === 'under-repair') {
+                // Only show RETR items
+                if (!/-RETR(?:-\d+)?$/i.test(upperId)) {
+                    return false;
+                }
+            } else if (currentTab === 'repaired') {
+                // Only show RETF items
+                if (!/-RETF(?:-\d+)?$/i.test(upperId)) {
+                    return false;
+                }
+            } else if (currentTab === 'disposed') {
+                // Only show RETD items
+                if (!/-RETD(?:-\d+)?$/i.test(upperId)) {
+                    return false;
+                }
             }
             
             const matchesSearch =
@@ -514,30 +696,64 @@ function filterInventory() {
 // Compute normalized status code for filtering
 function computeStatusCode(itemId, item) {
     const upperId = String(itemId).toUpperCase();
-    const quantity = parseInt(item.quantity || 0);
+    const baseQuantity = parseInt(item.quantity || 0);
     const limitL = parseInt(item.limitL || 0);
     
     if (/-RET(?:-\d+)?$/i.test(upperId)) return 'returned';
     if (/-RETR(?:-\d+)?$/i.test(upperId)) return 'under_repair';
     if (/-RETF(?:-\d+)?$/i.test(upperId)) return 'repaired';
-    if (quantity <= 0) return 'no_stock';
-    if (quantity > limitL) return 'available';
+    if (/-RETD(?:-\d+)?$/i.test(upperId)) return 'disposed';
+    
+    // For base items, calculate total quantity including all variants
+    let totalQuantity = baseQuantity;
+    Object.entries(inventoryData).forEach(([variantId, variantItem]) => {
+        const upperVariantId = String(variantId).toUpperCase();
+        if (/-RET(?:-\d+)?$/i.test(upperVariantId) || /-RETR(?:-\d+)?$/i.test(upperVariantId) || /-RETF(?:-\d+)?$/i.test(upperVariantId)) {
+            const baseId = variantId.replace(/-(RET|RETR|RETF)(?:-\d+)?$/i, '');
+            if (baseId === itemId) {
+                totalQuantity += parseInt(variantItem.quantity || 0);
+            }
+        }
+    });
+    
+    if (totalQuantity <= 0) return 'no_stock';
+    if (totalQuantity >= limitL) return 'available';
     return 'low_stock';
 }
 
 function createItemRowWithVariants(itemId, item, index, variants = []) {
     const row = document.createElement('tr');
     row.setAttribute('data-item-id', itemId);
-    const quantity = parseInt(item.quantity || 0);
+    const baseQuantity = parseInt(item.quantity || 0);
     
-    // Compute status text and color for base item
+    // Calculate total quantity including all variants (RET + RETR + RETF)
+    let totalQuantity = baseQuantity;
+    let totalReturned = 0;
+    let totalUnderRepair = 0;
+    let totalRepaired = 0;
+
+    variants.forEach(([variantId, variantItem]) => {
+        const quantity = parseInt(variantItem.quantity || 0);
+        const upperId = String(variantId).toUpperCase();
+        
+        if (/-RETR(?:-\d+)?$/i.test(upperId)) {
+            totalUnderRepair += quantity;
+        } else if (/-RETF(?:-\d+)?$/i.test(upperId)) {
+            totalRepaired += quantity;
+        } else if (/-RET(?:-\d+)?$/i.test(upperId)) {
+            totalReturned += quantity;
+        }
+        totalQuantity += quantity;
+    });
+    
+    // Compute status text and color based on total combined quantity
     const limitL = parseInt(item.limitL || 0);
     let statusText = '';
     let statusColor = '';
-    if (quantity <= 0) {
+    if (totalQuantity <= 0) {
         statusText = 'No stock';
         statusColor = '#e74c3c';
-    } else if (quantity > limitL) {
+    } else if (totalQuantity >= limitL) {
         statusText = 'Available';
         statusColor = '#2ecc71';
     } else {
@@ -545,49 +761,17 @@ function createItemRowWithVariants(itemId, item, index, variants = []) {
         statusColor = '#f1c40f';
     }
 
-    // Create variant dropdown if variants exist
+    // Variant dropdown removed - no longer showing RET/RETR/RETF variants
     let variantDropdown = '';
-    if (variants.length > 0) {
-        // Calculate totals for each status
-        let totalReturned = 0;
-        let totalUnderRepair = 0;
-        let totalRepaired = 0;
-
-        variants.forEach(([variantId, variantItem]) => {
-            const quantity = parseInt(variantItem.quantity || 0);
-            const upperId = String(variantId).toUpperCase();
-            
-            if (/-RETR(?:-\d+)?$/i.test(upperId)) {
-                totalUnderRepair += quantity;
-            } else if (/-RETF(?:-\d+)?$/i.test(upperId)) {
-                totalRepaired += quantity;
-            } else if (/-RET(?:-\d+)?$/i.test(upperId)) {
-                totalReturned += quantity;
-            }
-        });
-
-        variantDropdown = `
-            <div class="variant-dropdown">
-                <button class="variant-toggle-btn" onclick="toggleVariants('${itemId}')">
-                    <i class="fas fa-chevron-down"></i>
-                    <span class="variant-count">${variants.length}${variants.length !== 1 ? '' : ''}</span>
-                </button>
-                <div class="variant-content" id="variant-content-${itemId}" style="display: none;">
-                    ${totalRepaired > 0 ? `<div class="variant-item"><span class="variant-status" style="color: #2ecc71;">Repaired</span><span class="variant-quantity">${totalRepaired}</span></div>` : ''}
-                    ${totalUnderRepair > 0 ? `<div class="variant-item"><span class="variant-status" style="color: #e67e22;">Under Repair</span><span class="variant-quantity">${totalUnderRepair}</span></div>` : ''}
-                    ${totalReturned > 0 ? `<div class="variant-item"><span class="variant-status" style="color: #e74c3c;">Returned</span><span class="variant-quantity">${totalReturned}</span></div>` : ''}
-                </div>
-            </div>
-        `;
-    }
 
     row.innerHTML = `
         <td data-label="No.">${index}</td>
         <td data-label="Brand">${escapeCell(item.brand)}</td>
         <td data-label="Manufacturer">${escapeCell(item.manufacturer)}</td>
         <td data-label="Type">${escapeCell(item.type)}</td>
-        <td data-label="Quantity" class="quantity-cell">${quantity}</td>
+        <td data-label="Quantity" class="quantity-cell">${totalQuantity}</td>
         <td data-label="Unit">${escapeCell(item.quantityUnit)}</td>
+        <td data-label="Size">${escapeCell(item.size || '')}</td>
         <td data-label="Description">${escapeCell(item.description)}</td>
         <td data-label="Supplier Name">${escapeCell(item.supplierName)}</td>
         <td data-label="Supplier Number">${escapeCell(item.supplierNumber)}</td>
@@ -597,9 +781,19 @@ function createItemRowWithVariants(itemId, item, index, variants = []) {
         </td>
     `;
 
-    // Double-click action for base item (open adjust qty)
+    // Double-click action for base item (Brand New and Under Repair tabs)
     row.addEventListener('dblclick', () => {
-        openAdjustQtyModal(itemId, item);
+        const id = String(itemId);
+        
+        // Brand new items can adjust quantity
+        if (currentTab === 'brand-new') {
+            openAdjustQtyModal(id, item);
+        }
+        // Under Repair tab - open mark as repaired modal
+        else if (currentTab === 'under-repair') {
+            openMarkRepairedModal(id, item);
+        }
+        // All other tabs do nothing
     });
     
     return row;
@@ -624,10 +818,13 @@ function createItemRow(itemId, item, index, isGrouped = false) {
     } else if (/-RETF(?:-\d+)?$/i.test(upperId)) {
         statusText = 'Repaired';
         statusColor = '#2ecc71';
+    } else if (/-RETD(?:-\d+)?$/i.test(upperId)) {
+        statusText = 'Disposed';
+        statusColor = '#95a5a6';
     } else if (quantity <= 0) {
         statusText = 'No stock';
         statusColor = '#e74c3c';
-    } else if (quantity > limitL) {
+    } else if (quantity >= limitL) {
         statusText = 'Available';
         statusColor = '#2ecc71';
     } else {
@@ -635,52 +832,69 @@ function createItemRow(itemId, item, index, isGrouped = false) {
         statusColor = '#f1c40f';
     }
 
+    // For RET/RETR/RETF/RETD variants, get the base item details
+    let displayItem = item;
+    if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETR(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId) || /-RETD(?:-\d+)?$/i.test(upperId)) {
+        let baseId = itemId.replace(/-(RET|RETR|RETF|RETD)(?:-\d+)?$/i, '');
+        console.log('Variant item ID:', itemId, 'Extracted base ID:', baseId);
+        const baseItem = inventoryData[baseId];
+        console.log('Base item found:', baseItem);
+        if (baseItem) {
+            // Use base item's details but keep variant's quantity and status
+            displayItem = {
+                brand: baseItem.brand || item.brand || '',
+                manufacturer: baseItem.manufacturer || item.manufacturer || '',
+                type: baseItem.type || item.type || '',
+                quantityUnit: baseItem.quantityUnit || item.quantityUnit || '',
+                size: baseItem.size || item.size || '',
+                description: baseItem.description || item.description || '',
+                supplierName: baseItem.supplierName || item.supplierName || '',
+                supplierNumber: baseItem.supplierNumber || item.supplierNumber || '',
+                quantity: quantity, // Keep the variant quantity
+                limitL: baseItem.limitL || item.limitL || 0
+            };
+            console.log('Display item after merge:', displayItem);
+        } else {
+            console.log('Base item not found in inventoryData. Using variant data.');
+        }
+    }
+
     // Add indentation for grouped items
     const indentClass = isGrouped ? 'grouped-item' : '';
     const indentStyle = isGrouped ? 'padding-left: 30px;' : '';
 
+    const noteCellHtml = (currentTab === 'returned' || currentTab === 'disposed')
+        ? `<td data-label="Note" class="${indentClass}" style="${indentStyle}">${escapeCell(displayItem.note || item.note || '')}</td>`
+        : '';
+
     row.innerHTML = `
         <td data-label="No." class="${indentClass}" style="${indentStyle}">${index}</td>
-        <td data-label="Brand" class="${indentClass}" style="${indentStyle}">${escapeCell(item.brand)}</td>
-        <td data-label="Manufacturer" class="${indentClass}" style="${indentStyle}">${escapeCell(item.manufacturer)}</td>
-        <td data-label="Type" class="${indentClass}" style="${indentStyle}">${escapeCell(item.type)}</td>
+        <td data-label="Brand" class="${indentClass}" style="${indentStyle}">${escapeCell(displayItem.brand)}</td>
+        <td data-label="Manufacturer" class="${indentClass}" style="${indentStyle}">${escapeCell(displayItem.manufacturer)}</td>
+        <td data-label="Type" class="${indentClass}" style="${indentStyle}">${escapeCell(displayItem.type)}</td>
         <td data-label="Quantity" class="quantity-cell ${indentClass}" style="${indentStyle}">${quantity}</td>
-        <td data-label="Unit" class="${indentClass}" style="${indentStyle}">${escapeCell(item.quantityUnit)}</td>
-        <td data-label="Description" class="${indentClass}" style="${indentStyle}">${escapeCell(item.description)}</td>
-        <td data-label="Supplier Name" class="${indentClass}" style="${indentStyle}">${escapeCell(item.supplierName)}</td>
-        <td data-label="Supplier Number" class="${indentClass}" style="${indentStyle}">${escapeCell(item.supplierNumber)}</td>
+        <td data-label="Unit" class="${indentClass}" style="${indentStyle}">${escapeCell(displayItem.quantityUnit)}</td>
+        <td data-label="Size" class="${indentClass}" style="${indentStyle}">${escapeCell(displayItem.size || '')}</td>
+        <td data-label="Description" class="${indentClass}" style="${indentStyle}">${escapeCell(displayItem.description)}</td>
+        <td data-label="Supplier Name" class="${indentClass}" style="${indentStyle}">${escapeCell(displayItem.supplierName)}</td>
+        <td data-label="Supplier Number" class="${indentClass}" style="${indentStyle}">${escapeCell(displayItem.supplierNumber)}</td>
         <td data-label="Status" class="${indentClass}" style="${indentStyle}"><span style="color:${statusColor}; font-weight:600;">${statusText}</span></td>
+        ${noteCellHtml}
     `;
 
-    // Double-click actions: transition RET -> RETR, RETR -> RETF, else open adjust qty
+    // Double-click actions: works on Brand New and Under Repair tabs
     row.addEventListener('dblclick', () => {
         const id = String(itemId);
-        const upper = id.toUpperCase();
-        if (/-RETF(?:-\d+)?$/i.test(upper)) {
-            // Final state; no action
-            return;
+        
+        // Brand new items can adjust quantity
+        if (currentTab === 'brand-new') {
+            openAdjustQtyModal(id, displayItem);
         }
-        if (/-RETR(?:-\d+)?$/i.test(upper)) {
-            showConfirm('Mark this item as Repaired?').then(ok => {
-                if (!ok) return;
-                transitionItemStatus(id, 'RETF').catch(err => {
-                    console.error('Failed to mark repaired:', err);
-                    alert('Failed to mark as Repaired.');
-                });
-            });
-            return;
+        // Under Repair tab - open mark as repaired modal
+        else if (currentTab === 'under-repair') {
+            openMarkRepairedModal(id, displayItem);
         }
-        if (/-RET(?:-\d+)?$/i.test(upper)) {
-            showConfirm('Put this returned item Under Repair?').then(ok => {
-                if (!ok) return;
-                transitionItemStatus(id, 'RETR').catch(err => {
-                    console.error('Failed to move to Under Repair:', err);
-                    alert('Failed to put item Under Repair.');
-                });
-            });
-            return;
-        }
-        openAdjustQtyModal(id, item);
+        // All other tabs (returned, repaired, disposed) do nothing
     });
     
     return row;
@@ -843,8 +1057,13 @@ function renderCurrentPage() {
     // Clear the current list
     inventoryList.innerHTML = '';
     
+    // Check if status column should be hidden
+    let hideStatusColumn = currentTab === 'returned' || currentTab === 'under-repair' || currentTab === 'repaired' || currentTab === 'disposed';
+    // Base visible columns are 10 when status is hidden; add 1 more for Note on returned/ disposed
+    let colspan = hideStatusColumn ? (currentTab === 'returned' || currentTab === 'disposed' ? 11 : 10) : 11;
+    
     if (filteredItems.length === 0) {
-        inventoryList.innerHTML = '<tr><td colspan="10">No items found</td></tr>';
+        inventoryList.innerHTML = `<tr><td colspan="${colspan}">No items found</td></tr>`;
         return;
     }
     
@@ -887,8 +1106,44 @@ function renderCurrentPage() {
     currentItems.forEach(([itemId, item]) => {
         const variants = variantItems[itemId] || [];
         
-        const row = createItemRowWithVariants(itemId, item, rowNum++, variants);
+        // Use different rendering function based on tab
+        let row;
+        if (currentTab === 'brand-new') {
+            // Brand New tab uses variant display
+            row = createItemRowWithVariants(itemId, item, rowNum++, variants);
+        } else {
+            // Other tabs (returned, under-repair, repaired, disposed) show individual items
+            row = createItemRow(itemId, item, rowNum++, false);
+        }
+        
         inventoryList.appendChild(row);
+    });
+    
+    // Check if status column should be hidden for this tab
+    hideStatusColumn = currentTab === 'returned' || currentTab === 'under-repair' || currentTab === 'repaired' || currentTab === 'disposed';
+    
+    // Hide/show status column header and cells based on tab
+    const headerRow = document.querySelector('#inventory-table thead tr');
+    if (headerRow && headerRow.cells.length >= 11) {
+        headerRow.cells[10].style.display = hideStatusColumn ? 'none' : '';
+    }
+    // Toggle Remarks header (index 11) for Returned and Disposed tabs
+    if (headerRow && headerRow.cells.length >= 12) {
+        const showRemarks = currentTab === 'returned' || currentTab === 'disposed';
+        headerRow.cells[11].style.display = showRemarks ? '' : 'none';
+    }
+    
+    // Hide/show status cells in all data rows
+    const dataRows = inventoryList.querySelectorAll('tr');
+    dataRows.forEach(row => {
+        if (row.cells.length >= 11) {
+            row.cells[10].style.display = hideStatusColumn ? 'none' : '';
+        }
+        // Hide/show Remarks cells in rows (index 11) based on tab
+        if (row.cells.length >= 12) {
+            const showRemarks = currentTab === 'returned' || currentTab === 'disposed';
+            row.cells[11].style.display = showRemarks ? '' : 'none';
+        }
     });
     
     // Update pagination info
@@ -916,6 +1171,71 @@ window.toggleVariants = function(itemId) {
     }
 }
 
+// Variant action handlers
+window.toggleVariantActions = function(variantId, baseId) {
+    // Close others under the same base
+    const container = document.getElementById(`variant-content-${baseId}`);
+    if (container) {
+        const others = container.querySelectorAll('.variant-actions');
+        others.forEach(node => {
+            if (node.id !== `variant-actions-${variantId}`) node.style.display = 'none';
+        });
+    }
+    const el = document.getElementById(`variant-actions-${variantId}`);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+};
+
+window.onVariantCombine = async function(variantId) {
+    try {
+        // Merge variant quantity into base item, then remove variant
+        const baseId = String(variantId).replace(/-(RET|RETR|RETF)(-\d+)?$/i, '');
+        const snap = await inventoryRef.child(variantId).once('value');
+        if (!snap.exists()) return;
+        const data = snap.val() || {};
+        const addQty = Number(data.quantity || 0);
+        await inventoryRef.child(baseId).child('quantity').transaction(current => {
+            const curr = Number(current || 0);
+            return curr + addQty;
+        });
+        // Preserve some metadata on base if missing
+        const baseSnap = await inventoryRef.child(baseId).once('value');
+        const base = baseSnap.val() || {};
+        const payload = {
+            brand: base.brand || data.brand || '',
+            manufacturer: base.manufacturer || data.manufacturer || '',
+            type: base.type || data.type || '',
+            quantityUnit: base.quantityUnit || data.quantityUnit || '',
+            size: base.size || data.size || '',
+            description: base.description || data.description || '',
+            lastUpdated: Date.now()
+        };
+        await inventoryRef.child(baseId).update(payload);
+        await inventoryRef.child(variantId).remove();
+    } catch (e) {
+        console.error('Combine variant failed:', e);
+        alert('Failed to combine variant');
+    }
+};
+
+window.onVariantToRepair = async function(variantId) {
+    try {
+        await transitionItemStatus(variantId, 'RETR');
+    } catch (e) {
+        console.error('Move to Under Repair failed:', e);
+        alert('Failed to mark as Under Repair');
+    }
+};
+
+window.onVariantRepair = async function(variantId) {
+    try {
+        await transitionItemStatus(variantId, 'RETF');
+    } catch (e) {
+        console.error('Mark repaired failed:', e);
+        alert('Failed to mark as Repaired');
+    }
+};
+
 // Toggle group visibility - make it globally accessible
 window.toggleGroup = function(baseId) {
     const groupHeader = document.querySelector(`tr[data-group-id="${baseId}"]`);
@@ -935,6 +1255,99 @@ window.toggleGroup = function(baseId) {
     
     // Update group header styling
     groupHeader.classList.toggle('group-expanded', isCollapsed);
+}
+
+// Switch inventory tabs
+window.switchInventoryTab = function(tabName) {
+    currentTab = tabName;
+    
+    // Update active tab button
+    const tabButtons = document.querySelectorAll('.tab-button');
+    tabButtons.forEach(btn => {
+        if (btn.getAttribute('data-tab') === tabName) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    
+    // Show/hide status column header based on tab
+    const hideStatusColumn = tabName === 'returned' || tabName === 'under-repair' || tabName === 'repaired' || tabName === 'disposed';
+    const headerRow = document.querySelector('#inventory-table thead tr');
+    if (headerRow && headerRow.cells.length >= 11) {
+        headerRow.cells[10].style.display = hideStatusColumn ? 'none' : '';
+    }
+    
+    // Reset to first page and re-filter
+    currentPage = 1;
+    filterInventory();
+}
+
+// Toggle column visibility - make it globally accessible
+window.toggleColumn = function(columnIndex) {
+    const table = document.getElementById('inventory-table');
+    if (!table) return;
+    
+    const rows = table.querySelectorAll('tr');
+    const isMinimized = table.classList.contains(`col-${columnIndex}-minimized`);
+    
+    // Get the button element and icons
+    const headerCell = rows[0].cells[columnIndex - 1];
+    const buttonElement = headerCell.querySelector('button.minimize-btn');
+    const minimizeIcon = buttonElement ? buttonElement.querySelector('.minimize-icon') : null;
+    const maximizeIcon = buttonElement ? buttonElement.querySelector('.maximize-icon') : null;
+    
+    rows.forEach((row, rowIndex) => {
+        const cell = row.cells[columnIndex - 1];
+        if (cell) {
+            if (isMinimized) {
+                // Maximize/restore column
+                cell.style.width = '';
+                cell.style.minWidth = '';
+                cell.style.maxWidth = '';
+                cell.style.overflow = '';
+                cell.style.textOverflow = '';
+                cell.style.padding = '';
+                cell.style.whiteSpace = '';
+            } else {
+                // Minimize column
+                cell.style.width = '40px';
+                cell.style.minWidth = '40px';
+                cell.style.maxWidth = '40px';
+                cell.style.overflow = 'hidden';
+                cell.style.textOverflow = 'ellipsis';
+                cell.style.padding = '4px 2px';
+                cell.style.whiteSpace = 'nowrap';
+                
+                // Keep header visible for minimize button
+                if (rowIndex === 0) { // Header row
+                    cell.style.overflow = 'visible';
+                }
+            }
+        }
+    });
+    
+    // Toggle the minimized state
+    if (isMinimized) {
+        table.classList.remove(`col-${columnIndex}-minimized`);
+    } else {
+        table.classList.add(`col-${columnIndex}-minimized`);
+    }
+    
+    // Update button icons and title to reflect current state
+    if (minimizeIcon && maximizeIcon && buttonElement) {
+        if (isMinimized) {
+            // Now maximized - show minus (minimize) icon
+            minimizeIcon.style.display = '';
+            maximizeIcon.style.display = 'none';
+            buttonElement.title = 'Minimize column';
+        } else {
+            // Now minimized - show plus (maximize) icon
+            minimizeIcon.style.display = 'none';
+            maximizeIcon.style.display = '';
+            buttonElement.title = 'Maximize column';
+        }
+    }
 }
 
 // Render skeleton placeholder rows to preserve layout during loading
@@ -995,12 +1408,30 @@ function viewItemDetails(itemId, item) {
 async function transitionItemStatus(currentId, targetSuffix) {
     const upper = String(currentId).toUpperCase();
     let baseId = currentId;
-    // Strip known suffixes and optional numeric counters, e.g., -RETR-2
-    baseId = baseId.replace(/-(RET|RETR|RETF)(-\d+)?$/i, '');
+    // Strip known suffixes and optional numeric counters, e.g., -RETR-2, -RETD
+    baseId = baseId.replace(/-(RET|RETR|RETF|RETD)(-\d+)?$/i, '');
+    
+    // Get the current item data
     const snap = await inventoryRef.child(currentId).once('value');
     if (!snap.exists()) throw new Error('Item no longer exists');
-    const data = snap.val() || {};
-    data.lastUpdated = Date.now();
+    let data = snap.val() || {};
+    
+    // If transitioning from a variant, get the base item's data for proper display
+    if (/-RET(?:-\d+)?$/i.test(upper) || /-RETR(?:-\d+)?$/i.test(upper) || /-RETF(?:-\d+)?$/i.test(upper) || /-RETD(?:-\d+)?$/i.test(upper)) {
+        const baseSnap = await inventoryRef.child(baseId).once('value');
+        if (baseSnap.exists()) {
+            const baseData = baseSnap.val() || {};
+            // Merge base data but keep variant's quantity and status-specific data
+            data = {
+                ...baseData,
+                quantity: data.quantity, // Keep variant quantity
+                note: data.note || baseData.note,
+                lastUpdated: Date.now()
+            };
+        }
+    } else {
+        data.lastUpdated = Date.now();
+    }
     
     // Get current user info for activity tracking
     const userSession = sessionStorage.getItem('elavil_user');
@@ -1042,6 +1473,7 @@ async function transitionItemStatus(currentId, targetSuffix) {
                 manufacturer: existing.manufacturer || data.manufacturer,
                 type: existing.type || data.type,
                 quantityUnit: existing.quantityUnit || data.quantityUnit,
+                size: existing.size || data.size,
                 description: existing.description || data.description,
                 supplierName: existing.supplierName || data.supplierName,
                 supplierNumber: existing.supplierNumber || data.supplierNumber,
@@ -1195,13 +1627,25 @@ function updateSummary() {
         // Count total base items (this should match table count)
         totalItems++;
         
-        const quantity = parseInt(item.quantity || 0);
+        const baseQuantity = parseInt(item.quantity || 0);
         const limitL = parseInt(item.limitL || 0);
         
-        // Check if item has zero quantity
-        if (quantity <= 0) {
+        // Calculate total quantity including all variants
+        let totalQuantity = baseQuantity;
+        Object.entries(inventoryData).forEach(([variantId, variantItem]) => {
+            const upperVariantId = String(variantId).toUpperCase();
+            if (/-RET(?:-\d+)?$/i.test(upperVariantId) || /-RETR(?:-\d+)?$/i.test(upperVariantId) || /-RETF(?:-\d+)?$/i.test(upperVariantId)) {
+                const baseId = variantId.replace(/-(RET|RETR|RETF)(?:-\d+)?$/i, '');
+                if (baseId === itemId) {
+                    totalQuantity += parseInt(variantItem.quantity || 0);
+                }
+            }
+        });
+        
+        // Check if item has zero total quantity
+        if (totalQuantity <= 0) {
             noStockItems++;
-        } else if (quantity > limitL) {
+        } else if (totalQuantity >= limitL) {
             availableCount++;
         } else {
             lowStockItems++;
