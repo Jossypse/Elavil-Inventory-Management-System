@@ -22,10 +22,14 @@ const inventoryList = document.getElementById('inventory-list');
 const searchInput = document.getElementById('search-items');
 const typeFilter = document.getElementById('type-filter');
 const statusFilterEl = document.getElementById('status-filter');
+const sortFilterEl = document.getElementById('sort-filter');
 const underRepairEl = document.getElementById('under-repair').querySelector('.summary-value');
 const readyToUseEl = document.getElementById('ready-to-use').querySelector('.summary-value');
 const lowStockEl = document.getElementById('low-stock').querySelector('.summary-value');
 const noStockEl = document.getElementById('no-stock').querySelector('.summary-value');
+const underRepairRetrEl = document.getElementById('under-repair-retr').querySelector('.summary-value');
+const repairedRetfEl = document.getElementById('repaired-retf').querySelector('.summary-value');
+const disposedRetdEl = document.getElementById('disposed-retd').querySelector('.summary-value');
 const sidebarItems = document.querySelectorAll('.sidebar-menu li');
 
 // Pagination variables
@@ -57,6 +61,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     if (statusFilterEl) {
         statusFilterEl.addEventListener('change', function() {
+            currentPage = 1;
+            filterInventory();
+        });
+    }
+    if (sortFilterEl) {
+        sortFilterEl.addEventListener('change', function() {
             currentPage = 1;
             filterInventory();
         });
@@ -317,6 +327,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Adjust quantity failed:', err);
                 alert('Failed to adjust quantity.');
             }
+        });
+    }
+
+    // Wire Transaction History modal handlers
+    const historyModal = document.getElementById('transaction-history-modal');
+    const historyClose = document.getElementById('close-transaction-history');
+    
+    if (historyModal && historyClose) {
+        historyClose.addEventListener('click', closeTransactionHistory);
+        window.addEventListener('click', (e) => {
+            if (e.target === historyModal) closeTransactionHistory();
         });
     }
 
@@ -683,6 +704,57 @@ function filterInventory() {
             return matchesSearch && matchesType && matchesStatus;
         });
     
+    // Apply sorting if a sort option is selected
+    const sortValue = (sortFilterEl && sortFilterEl.value) || 'none';
+    if (sortValue !== 'none') {
+        filteredItems.sort(([itemIdA, itemA], [itemIdB, itemB]) => {
+            let valueA, valueB;
+            
+            if (sortValue === 'type') {
+                // Sort by type first, then by brand, then by manufacturer
+                const typeA = (itemA.type || '').toLowerCase();
+                const typeB = (itemB.type || '').toLowerCase();
+                if (typeA !== typeB) {
+                    return typeA < typeB ? -1 : 1;
+                }
+                // Same type, sort by brand
+                const brandA = (itemA.brand || '').toLowerCase();
+                const brandB = (itemB.brand || '').toLowerCase();
+                if (brandA !== brandB) {
+                    return brandA < brandB ? -1 : 1;
+                }
+                // Same type and brand, sort by manufacturer
+                const manA = (itemA.manufacturer || '').toLowerCase();
+                const manB = (itemB.manufacturer || '').toLowerCase();
+                return manA < manB ? -1 : manA > manB ? 1 : 0;
+            } else if (sortValue === 'brand') {
+                // Sort by brand first, then by manufacturer
+                const brandA = (itemA.brand || '').toLowerCase();
+                const brandB = (itemB.brand || '').toLowerCase();
+                if (brandA !== brandB) {
+                    return brandA < brandB ? -1 : 1;
+                }
+                // Same brand, sort by manufacturer
+                const manA = (itemA.manufacturer || '').toLowerCase();
+                const manB = (itemB.manufacturer || '').toLowerCase();
+                return manA < manB ? -1 : manA > manB ? 1 : 0;
+            } else if (sortValue === 'manufacturer') {
+                // Sort by manufacturer first, then by brand
+                const manA = (itemA.manufacturer || '').toLowerCase();
+                const manB = (itemB.manufacturer || '').toLowerCase();
+                if (manA !== manB) {
+                    return manA < manB ? -1 : 1;
+                }
+                // Same manufacturer, sort by brand
+                const brandA = (itemA.brand || '').toLowerCase();
+                const brandB = (itemB.brand || '').toLowerCase();
+                return brandA < brandB ? -1 : brandA > brandB ? 1 : 0;
+            }
+            
+            return 0;
+        });
+    }
+    
     // Log filtered items for debugging
     console.log('Filtered items:', filteredItems);
     
@@ -781,20 +853,47 @@ function createItemRowWithVariants(itemId, item, index, variants = []) {
         </td>
     `;
 
-    // Double-click action for base item (Brand New and Under Repair tabs)
-    row.addEventListener('dblclick', () => {
-        const id = String(itemId);
+    // Single-click and double-click handlers for brand-new tab
+    if (currentTab === 'brand-new') {
+        row.style.cursor = 'pointer';
+        let clickTimer = null;
         
-        // Brand new items can adjust quantity
-        if (currentTab === 'brand-new') {
+        row.addEventListener('click', (e) => {
+            // Clear any existing timer
+            if (clickTimer) {
+                clearTimeout(clickTimer);
+            }
+            
+            // Set a timer to trigger single click after delay
+            clickTimer = setTimeout(() => {
+                const id = String(itemId);
+                openTransactionHistory(id, item);
+                clickTimer = null;
+            }, 300); // Wait 300ms to see if double-click occurs
+        });
+        
+        // Double-click action - cancel single click and open adjust modal
+        row.addEventListener('dblclick', (e) => {
+            // Cancel the single-click timer
+            if (clickTimer) {
+                clearTimeout(clickTimer);
+                clickTimer = null;
+            }
+            
+            const id = String(itemId);
             openAdjustQtyModal(id, item);
-        }
-        // Under Repair tab - open mark as repaired modal
-        else if (currentTab === 'under-repair') {
-            openMarkRepairedModal(id, item);
-        }
-        // All other tabs do nothing
-    });
+        });
+    } else {
+        // Double-click action for other tabs (Under Repair)
+        row.addEventListener('dblclick', () => {
+            const id = String(itemId);
+            
+            // Under Repair tab - open mark as repaired modal
+            if (currentTab === 'under-repair') {
+                openMarkRepairedModal(id, item);
+            }
+        });
+    }
     
     return row;
 }
@@ -882,20 +981,48 @@ function createItemRow(itemId, item, index, isGrouped = false) {
         ${noteCellHtml}
     `;
 
-    // Double-click actions: works on Brand New and Under Repair tabs
-    row.addEventListener('dblclick', () => {
-        const id = String(itemId);
+    // Single-click and double-click handlers for brand-new tab
+    if (currentTab === 'brand-new') {
+        row.style.cursor = 'pointer';
+        let clickTimer = null;
         
-        // Brand new items can adjust quantity
-        if (currentTab === 'brand-new') {
+        row.addEventListener('click', (e) => {
+            // Clear any existing timer
+            if (clickTimer) {
+                clearTimeout(clickTimer);
+            }
+            
+            // Set a timer to trigger single click after delay
+            clickTimer = setTimeout(() => {
+                const id = String(itemId);
+                openTransactionHistory(id, displayItem);
+                clickTimer = null;
+            }, 300); // Wait 300ms to see if double-click occurs
+        });
+        
+        // Double-click action - cancel single click and open adjust modal
+        row.addEventListener('dblclick', (e) => {
+            // Cancel the single-click timer
+            if (clickTimer) {
+                clearTimeout(clickTimer);
+                clickTimer = null;
+            }
+            
+            const id = String(itemId);
             openAdjustQtyModal(id, displayItem);
-        }
-        // Under Repair tab - open mark as repaired modal
-        else if (currentTab === 'under-repair') {
-            openMarkRepairedModal(id, displayItem);
-        }
-        // All other tabs (returned, repaired, disposed) do nothing
-    });
+        });
+    } else {
+        // Double-click actions for other tabs (Under Repair)
+        row.addEventListener('dblclick', () => {
+            const id = String(itemId);
+            
+            // Under Repair tab - open mark as repaired modal
+            if (currentTab === 'under-repair') {
+                openMarkRepairedModal(id, displayItem);
+            }
+            // All other tabs (returned, repaired, disposed) do nothing
+        });
+    }
     
     return row;
 }
@@ -1610,17 +1737,19 @@ function showConfirm(message) {
 function updateSummary() {
     let returnedItemsCount = 0; // Count items with -RET suffix (returned items)
     let underRepairCount = 0; // Count items with -RETR suffix (under repair items)
+    let repairedCount = 0; // Count items with -RETF suffix (repaired items)
+    let disposedCount = 0; // Count items with -RETD suffix (disposed items)
     let totalItems = 0; // Total base items (matches table count)
     let availableCount = 0;
     let lowStockItems = 0;
     let noStockItems = 0;
     
-    // Only count base items (without RET/RETR/RETF suffixes)
+    // Only count base items (without RET/RETR/RETF/RETD suffixes)
     Object.entries(inventoryData).forEach(([itemId, item]) => {
         const upperId = String(itemId).toUpperCase();
         
-        // Skip RET/RETR/RETF variants - only count base items
-        if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETR(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId)) {
+        // Skip RET/RETR/RETF/RETD variants - only count base items
+        if (/-RET(?:-\d+)?$/i.test(upperId) || /-RETR(?:-\d+)?$/i.test(upperId) || /-RETF(?:-\d+)?$/i.test(upperId) || /-RETD(?:-\d+)?$/i.test(upperId)) {
             return;
         }
         
@@ -1655,7 +1784,7 @@ function updateSummary() {
     // Count items whose ID ends with -RET (returned items)
     try {
         returnedItemsCount = Object.keys(inventoryData)
-            .filter(id => typeof id === 'string' && /-RET(?:-\d+)?$/i.test(id))
+            .filter(id => typeof id === 'string' && /-RET(?:-\d+)?$/i.test(id) && !/-RETR(?:-\d+)?$/i.test(id.toUpperCase()) && !/-RETF(?:-\d+)?$/i.test(id.toUpperCase()) && !/-RETD(?:-\d+)?$/i.test(id.toUpperCase()))
             .length;
     } catch(e) {
         returnedItemsCount = 0;
@@ -1670,9 +1799,511 @@ function updateSummary() {
         underRepairCount = 0;
     }
     
+    // Count items whose ID ends with -RETF (repaired items)
+    try {
+        repairedCount = Object.keys(inventoryData)
+            .filter(id => typeof id === 'string' && /-RETF(?:-\d+)?$/i.test(id))
+            .length;
+    } catch(e) {
+        repairedCount = 0;
+    }
+    
+    // Count items whose ID ends with -RETD (disposed items)
+    try {
+        disposedCount = Object.keys(inventoryData)
+            .filter(id => typeof id === 'string' && /-RETD(?:-\d+)?$/i.test(id))
+            .length;
+    } catch(e) {
+        disposedCount = 0;
+    }
+    
     // Update summary elements
     underRepairEl.textContent = returnedItemsCount; // This element shows "Items Returned"
     readyToUseEl.textContent = totalItems; // This shows total items (matches table count)
     lowStockEl.textContent = lowStockItems;
     noStockEl.textContent = noStockItems;
+    underRepairRetrEl.textContent = underRepairCount;
+    repairedRetfEl.textContent = repairedCount;
+    disposedRetdEl.textContent = disposedCount;
+}
+
+// Transaction History Functions
+function openTransactionHistory(itemId, item) {
+    const modal = document.getElementById('transaction-history-modal');
+    if (!modal) return;
+    
+    // Show modal and loading state
+    modal.style.display = 'flex';
+    document.getElementById('transaction-history-loading').style.display = 'block';
+    document.getElementById('transaction-history-content').style.display = 'none';
+    document.getElementById('transaction-history-empty').style.display = 'none';
+    
+    // Load history
+    loadTransactionHistory(itemId, item);
+}
+
+function closeTransactionHistory() {
+    const modal = document.getElementById('transaction-history-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+
+async function loadTransactionHistory(itemId, item) {
+    try {
+        const activitiesRef = database.ref('activities');
+        const snapshot = await activitiesRef.once('value');
+        
+        if (!snapshot.exists()) {
+            showEmptyHistory();
+            return;
+        }
+        
+        const allActivities = snapshot.val();
+        const candidateActivities = [];
+        const requestIdsToCheck = new Set();
+        const returnIdsToCheck = new Set();
+        
+        // First pass: Quick filter for Inventory activities and collect Request/Return IDs
+        // This avoids expensive database queries for activities that won't match anyway
+        for (const [activityId, activity] of Object.entries(allActivities)) {
+            const description = (activity.description || '').toLowerCase();
+            let quickMatch = false;
+            
+            // Fast check for Inventory activities by ID prefix
+            if (activity.actType === 'Inventory') {
+                // Check if description mentions quantity changes first (avoid expensive ID extraction)
+                if (description.includes('added') || description.includes('adjust')) {
+                    const baseId = extractInventoryIdFromActivity(activityId, activity);
+                    if (baseId === itemId || activityId.startsWith(itemId)) {
+                        quickMatch = true;
+                    }
+                }
+            }
+            // Fast check for Request activities - only collect IDs for "picked up" activities
+            else if (activity.actType === 'Request') {
+                if (description.includes('picked up') || description.includes('pickup')) {
+                    const requestId = extractRequestIdFromActivity(activityId);
+                    if (requestId) {
+                        requestIdsToCheck.add(requestId);
+                        candidateActivities.push({
+                            activityId,
+                            ...activity,
+                            _requestId: requestId,
+                            _needsCheck: true
+                        });
+                    }
+                }
+            }
+            // Fast check for Return activities
+            else if (activity.actType === 'Return') {
+                if (description.includes('return request accepted') || description.includes('returned')) {
+                    const returnId = extractReturnIdFromActivity(activityId);
+                    if (returnId) {
+                        returnIdsToCheck.add(returnId);
+                        candidateActivities.push({
+                            activityId,
+                            ...activity,
+                            _returnId: returnId,
+                            _needsCheck: true
+                        });
+                    }
+                }
+            }
+            
+            // Also check direct itemId field
+            if (!quickMatch && activity.itemId) {
+                if (activity.itemId === itemId || activity.itemId.startsWith(itemId)) {
+                    const desc = (activity.description || '').toLowerCase();
+                    // Only include if it affects quantity
+                    if ((activity.actType === 'Inventory' && (desc.includes('added') || desc.includes('adjust'))) ||
+                        (activity.actType === 'Request' && (desc.includes('picked up') || desc.includes('pickup'))) ||
+                        (activity.actType === 'Return' && (desc.includes('return request accepted') || desc.includes('returned')))) {
+                        candidateActivities.push({
+                            activityId,
+                            ...activity
+                        });
+                    }
+                }
+            } else if (quickMatch) {
+                candidateActivities.push({
+                    activityId,
+                    ...activity
+                });
+            }
+        }
+        
+        // Batch fetch all PartsRequest and ReturnParts in parallel
+        const batchPromises = [];
+        const requestPartsMap = new Map();
+        const returnPartsMap = new Map();
+        
+        // Batch fetch PartsRequest
+        if (requestIdsToCheck.size > 0) {
+            requestIdsToCheck.forEach(requestId => {
+                batchPromises.push(
+                    database.ref(`PartsRequest/${requestId}`).once('value').then(snap => {
+                        if (snap.exists()) {
+                            requestPartsMap.set(requestId, snap.val());
+                        }
+                    })
+                );
+            });
+        }
+        
+        // Batch fetch ReturnParts
+        if (returnIdsToCheck.size > 0) {
+            returnIdsToCheck.forEach(returnId => {
+                batchPromises.push(
+                    database.ref(`ReturnParts/${returnId}`).once('value').then(snap => {
+                        if (snap.exists()) {
+                            returnPartsMap.set(returnId, snap.val());
+                        }
+                    })
+                );
+            });
+        }
+        
+        // Wait for all batch queries to complete in parallel
+        await Promise.all(batchPromises);
+        
+        // Second pass: Filter Request and Return activities using cached data
+        const quantityAffectingActivities = candidateActivities.filter(activity => {
+            // Inventory activities already filtered in first pass
+            if (activity.actType === 'Inventory') {
+                return true;
+            }
+            
+            // Request activities - check cached PartsRequest data
+            if (activity.actType === 'Request' && activity._needsCheck) {
+                const parts = requestPartsMap.get(activity._requestId);
+                if (parts && typeof parts === 'object') {
+                    for (const partId in parts) {
+                        if (partId === itemId || partId.startsWith(itemId)) {
+                            // Cache the parts data for later use
+                            activity.requestData = parts;
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            
+            // Return activities - check cached ReturnParts data
+            if (activity.actType === 'Return' && activity._needsCheck) {
+                const parts = returnPartsMap.get(activity._returnId);
+                if (parts && typeof parts === 'object') {
+                    for (const partId in parts) {
+                        if (partId === itemId || partId.startsWith(itemId)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // Sort by time (newest first) and take latest 5
+        quantityAffectingActivities.sort((a, b) => {
+            const timeA = a.time || '';
+            const timeB = b.time || '';
+            return timeB.localeCompare(timeA);
+        });
+        
+        const latest5 = quantityAffectingActivities.slice(0, 5);
+        
+        if (latest5.length === 0) {
+            showEmptyHistory();
+            return;
+        }
+        
+        // Fetch additional details for Return activities only (Request already cached)
+        const enrichedActivities = await Promise.all(
+            latest5.map(async (activity) => {
+                const enriched = { ...activity };
+                
+                // Remove internal flags
+                delete enriched._requestId;
+                delete enriched._returnId;
+                delete enriched._needsCheck;
+                
+                // Request data already cached in requestData
+                // Only need to fetch ReturnRequests details
+                if (activity.actType === 'Return') {
+                    const returnId = extractReturnIdFromActivity(activity.activityId);
+                    if (returnId && !enriched.returnData) {
+                        const returnRequestRef = database.ref(`ReturnRequests/${returnId}`);
+                        const returnSnap = await returnRequestRef.once('value');
+                        if (returnSnap.exists()) {
+                            enriched.returnData = returnSnap.val();
+                        }
+                    }
+                }
+                
+                return enriched;
+            })
+        );
+        
+        displayTransactionHistory(enrichedActivities, item, itemId);
+        
+    } catch (error) {
+        console.error('Error loading transaction history:', error);
+        showEmptyHistory();
+    }
+}
+
+function extractInventoryIdFromActivity(activityId, activity) {
+    if (!activityId) return '';
+    
+    // For Inventory activities: {inventoryId}-{counter}
+    if (activity && activity.actType === 'Inventory') {
+        // Remove trailing -{number} pattern
+        return activityId.replace(/-\d+$/, '');
+    }
+    
+    // For Request activities: {requestId}-{counter}
+    // We don't extract inventory ID from these
+    if (activity && activity.actType === 'Request') {
+        return null;
+    }
+    
+    // For Return activities: RET-{requestId}-{timestamp}
+    // We don't extract inventory ID from these
+    if (activity && activity.actType === 'Return') {
+        return null;
+    }
+    
+    // Default: try to remove trailing -{number}
+    return activityId.replace(/-\d+$/, '');
+}
+
+function extractRequestIdFromActivity(activityId) {
+    if (!activityId) return null;
+    
+    // Format: {requestId}-{counter}
+    // Remove trailing -{number} to get request ID
+    return activityId.replace(/-\d+$/, '');
+}
+
+function extractReturnIdFromActivity(activityId) {
+    if (!activityId) return null;
+    
+    // Format: RET-{requestId}-{timestamp}
+    // Extract the requestId between RET- and last timestamp
+    const match = activityId.match(/^RET-(.+?)-(\d+)$/);
+    if (match && match[1]) {
+        return match[1];
+    }
+    
+    // Fallback: try removing RET- prefix and last timestamp
+    return activityId.replace(/^RET-/, '').replace(/-\d+$/, '');
+}
+
+function displayTransactionHistory(activities, item, itemId) {
+    const loadingEl = document.getElementById('transaction-history-loading');
+    const contentEl = document.getElementById('transaction-history-content');
+    const listEl = document.getElementById('transaction-history-list');
+    const emptyEl = document.getElementById('transaction-history-empty');
+    
+    loadingEl.style.display = 'none';
+    emptyEl.style.display = 'none';
+    contentEl.style.display = 'block';
+    
+    // Clear previous content
+    listEl.innerHTML = '';
+    
+    // Add header with item info
+    const headerDiv = document.createElement('div');
+    headerDiv.style.cssText = 'padding:1rem; background:#f8f9fa; border-radius:8px; margin-bottom:1rem;';
+    headerDiv.innerHTML = `
+        <div style="font-weight:600; color:#2c3e50; margin-bottom:0.5rem;">${escapeCell(item.brand)} ${escapeCell(item.type)}</div>
+        <div style="font-size:0.9rem; color:#7f8c8d;">${escapeCell(item.manufacturer)} • History of Quantity Changes</div>
+    `;
+    listEl.appendChild(headerDiv);
+    
+    // Render each activity
+    activities.forEach((activity, index) => {
+        const activityDiv = document.createElement('div');
+        activityDiv.style.cssText = 'padding:1rem; border:1px solid #e9ecef; border-radius:8px; margin-bottom:0.75rem; background:#fff;';
+        
+        let activityContent = '';
+        const timeStr = formatTime(activity.time);
+        const icon = getActivityIcon(activity.actType);
+        const color = getActivityColor(activity.actType);
+        
+        if (activity.actType === 'Inventory') {
+            // Parse description like "Added 1 Yamalube engine oil" to "+ 1 Yamalube engine oil"
+            let displayText = activity.description || '';
+            if (displayText.toLowerCase().startsWith('added ')) {
+                displayText = '+ ' + displayText.substring(6); // Remove "Added " and add "+ "
+            } else if (displayText.toLowerCase().includes('added')) {
+                // Handle cases like "Added X items to inventory"
+                displayText = displayText.replace(/added\s+/i, '+ ');
+            }
+            
+            activityContent = `
+                <div style="display:flex; align-items:start; gap:1rem;">
+                    <div style="font-size:1.5rem; color:${color};">
+                        <i class="${icon}"></i>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-weight:600; color:#2c3e50; margin-bottom:0.25rem;">
+                            ${escapeCell(displayText)}
+                        </div>
+                        <div style="font-size:0.85rem; color:#7f8c8d;">
+                            <i class="fas fa-user"></i> ${escapeCell(activity.user)} • 
+                            <i class="fas fa-user-tag"></i> ${escapeCell(activity.role)}
+                        </div>
+                        <div style="font-size:0.8rem; color:#95a5a6; margin-top:0.25rem;">
+                            <i class="fas fa-clock"></i> ${timeStr}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (activity.actType === 'Request') {
+            // Try to get quantity deducted from PartsRequest for display
+            let deductedQty = null;
+            if (activity.requestData) {
+                const reqData = activity.requestData;
+                // PartsRequest data structure might have quantity info
+                if (reqData && typeof reqData === 'object') {
+                    // Look for the item's quantity in the request
+                    for (const partId in reqData) {
+                        if (partId === itemId || partId.startsWith(itemId)) {
+                            const partData = reqData[partId];
+                            if (partData && partData.quantity) {
+                                deductedQty = partData.quantity;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Build display text with item name
+            let displayText = '';
+            if (deductedQty) {
+                const itemName = `${item.brand || ''} ${item.type || ''}`.trim();
+                displayText = `- ${deductedQty} ${itemName}`;
+            } else {
+                displayText = activity.description || 'Request Item Picked Up';
+            }
+            
+            activityContent = `
+                <div style="display:flex; align-items:start; gap:1rem;">
+                    <div style="font-size:1.5rem; color:${color};">
+                        <i class="${icon}"></i>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-weight:600; color:#2c3e50; margin-bottom:0.25rem;">
+                            ${escapeCell(displayText)}
+                        </div>
+                        <div style="font-size:0.85rem; color:#7f8c8d;">
+                            <i class="fas fa-user"></i> ${escapeCell(activity.user)} • 
+                            <i class="fas fa-user-tag"></i> ${escapeCell(activity.role)}
+                        </div>
+                        <div style="font-size:0.8rem; color:#95a5a6; margin-top:0.25rem;">
+                            <i class="fas fa-clock"></i> ${timeStr}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (activity.actType === 'Return') {
+            const returnId = extractReturnIdFromActivity(activity.activityId);
+            let returnInfo = '';
+            
+            if (activity.returnData) {
+                const retData = activity.returnData;
+                returnInfo = `
+                    <div style="margin-top:0.5rem; padding:0.5rem; background:#f8f9fa; border-radius:4px; font-size:0.85rem;">
+                        <div><strong>Return Request ID:</strong> ${escapeCell(returnId)}</div>
+                        ${retData.busId ? `<div><strong>Bus ID:</strong> ${escapeCell(retData.busId)}</div>` : ''}
+                        ${retData.status ? `<div><strong>Status:</strong> ${escapeCell(retData.status)}</div>` : ''}
+                    </div>
+                `;
+            }
+            
+            activityContent = `
+                <div style="display:flex; align-items:start; gap:1rem;">
+                    <div style="font-size:1.5rem; color:${color};">
+                        <i class="${icon}"></i>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-weight:600; color:#2c3e50; margin-bottom:0.25rem;">
+                            ${escapeCell(activity.description)}
+                        </div>
+                        <div style="font-size:0.85rem; color:#7f8c8d;">
+                            <i class="fas fa-user"></i> ${escapeCell(activity.user)} • 
+                            <i class="fas fa-user-tag"></i> ${escapeCell(activity.role)}
+                        </div>
+                        ${returnInfo}
+                        <div style="font-size:0.8rem; color:#95a5a6; margin-top:0.25rem;">
+                            <i class="fas fa-clock"></i> ${timeStr}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        activityDiv.innerHTML = activityContent;
+        listEl.appendChild(activityDiv);
+    });
+}
+
+function getActivityIcon(actType) {
+    switch (actType) {
+        case 'Inventory': return 'fas fa-box';
+        case 'Request': return 'fas fa-shopping-cart';
+        case 'Return': return 'fas fa-undo';
+        default: return 'fas fa-circle';
+    }
+}
+
+function getActivityColor(actType) {
+    switch (actType) {
+        case 'Inventory': return '#3498db';
+        case 'Request': return '#e67e22';
+        case 'Return': return '#2ecc71';
+        default: return '#95a5a6';
+    }
+}
+
+function formatTime(timeStr) {
+    if (!timeStr || timeStr.length !== 14) return 'Unknown time';
+    
+    // Format: YYYYMMDDHHmmss
+    const year = timeStr.substring(0, 4);
+    const month = timeStr.substring(4, 6);
+    const day = timeStr.substring(6, 8);
+    const hour = timeStr.substring(8, 10);
+    const minute = timeStr.substring(10, 12);
+    const second = timeStr.substring(12, 14);
+    
+    const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    // Always show days ago format
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return '1 day ago';
+    return `${diffDays} days ago`;
+}
+
+function showEmptyHistory() {
+    const loadingEl = document.getElementById('transaction-history-loading');
+    const contentEl = document.getElementById('transaction-history-content');
+    const emptyEl = document.getElementById('transaction-history-empty');
+    
+    loadingEl.style.display = 'none';
+    contentEl.style.display = 'none';
+    emptyEl.style.display = 'block';
 } 

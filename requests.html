@@ -49,9 +49,9 @@
                         <input type="text" id="search-requests" placeholder="Search requests...">
                         <select id="status-filter">
                             <option value="all">All Status</option>
-                            <option value="ToBeConfirmed">ToBeConfirmed</option>
-                            <option value="ToPickup">ToPickup</option>
-                            <option value="ToWait">NotAvailable</option>
+                            <option value="ToBeConfirmed">To Be Confirmed</option>
+                            <option value="ToPickup">To Pickup</option>
+                            <option value="ToWait">Not Available</option>
                             <option value="Completed">Completed</option>
                         </select>
                         <select id="date-filter">
@@ -69,15 +69,15 @@
                         <h2>Requests</h2>
                         <div class="requests-stats">
                             <div class="stat-item">
-                                <span class="stat-label">ToBeConfirmed</span>
+                                <span class="stat-label">To Be Confirmed</span>
                                 <span class="stat-value" id="toBeConfirmed-count">0</span>
                             </div>
                             <div class="stat-item">
-                                <span class="stat-label">ToPickup</span>
+                                <span class="stat-label">To Pickup</span>
                                 <span class="stat-value" id="toPickup-count">0</span>
                             </div>
                             <div class="stat-item">
-                                <span class="stat-label">NotAvailable</span>
+                                <span class="stat-label">Not Available</span>
                                 <span class="stat-value" id="toWait-count">0</span>
                             </div>
                             <div class="stat-item">
@@ -102,7 +102,7 @@
                                             <th>Bus No.</th>
                                             <th>Date</th>
                                             <th>Status</th>
-                                            <th>Actions</th>
+                                            <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="requests-table-body">
@@ -160,8 +160,8 @@
                             </div>
 
                             <div class="action-buttons">
-                                <button id="approve-request" class="success-button">ToPickup</button>
-                                <button id="reject-request" class="danger-button">ToWait</button>
+                                <button id="approve-request" class="success-button">To Pickup</button>
+                                <button id="reject-request" class="danger-button">To Wait</button>
                             </div>
                         </div>
                     </div>

@@ -47,6 +47,11 @@
                         <h2>Current Inventory</h2>
                         <div class="inventory-summary">
                             <div class="summary-cards">
+
+                                <div class="summary-card" id="no-stock">
+                                    <span class="summary-label">Out of Stock</span>
+                                    <span class="summary-value">0</span>
+                                </div>
                                 <div class="summary-card" id="under-repair">
                                     <span class="summary-label">Returned</span>
                                     <span class="summary-value">0</span>
@@ -59,8 +64,17 @@
                                     <span class="summary-label">Low Stock</span>
                                     <span class="summary-value">0</span>
                                 </div>
-                                <div class="summary-card" id="no-stock">
-                                    <span class="summary-label">Out of Stock</span>
+                               
+                                <div class="summary-card" id="under-repair-retr">
+                                    <span class="summary-label">Under Repair</span>
+                                    <span class="summary-value">0</span>
+                                </div>
+                                <div class="summary-card" id="repaired-retf">
+                                    <span class="summary-label">Repaired</span>
+                                    <span class="summary-value">0</span>
+                                </div>
+                                <div class="summary-card" id="disposed-retd">
+                                    <span class="summary-label">Disposed</span>
                                     <span class="summary-value">0</span>
                                 </div>
                             </div>
@@ -98,6 +112,12 @@
                             <option value="returned">Returned</option>
                             <option value="repaired">Repaired</option>
                             <option value="disposed">Disposed</option>
+                        </select>
+                        <select id="sort-filter">
+                            <option value="none">Sort By</option>
+                            <option value="type">Type</option>
+                            <option value="brand">Brand</option>
+                            <option value="manufacturer">Manufacturer</option>
                         </select>
                     </div>
                     <div class="table-container">
@@ -155,7 +175,100 @@
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="inv-type">Type</label>
-                                    <input type="text" id="inv-type" placeholder="e.g., engine oil" required>
+                                    <input type="text" id="inv-type" list="inventory-types" placeholder="e.g., engine oil" required>
+                                    <datalist id="inventory-types">
+                                        <option value="Engine Oil">
+                                        <option value="Transmission Fluid">
+                                        <option value="Brake Fluid">
+                                        <option value="Power Steering Fluid">
+                                        <option value="Coolant">
+                                        <option value="Hydraulic Oil">
+                                        <option value="Gear Oil">
+                                        <option value="Air Filter">
+                                        <option value="Oil Filter">
+                                        <option value="Fuel Filter">
+                                        <option value="Cabin Filter">
+                                        <option value="Spark Plug">
+                                        <option value="Glow Plug">
+                                        <option value="Battery">
+                                        <option value="Alternator">
+                                        <option value="Starter Motor">
+                                        <option value="Radiator">
+                                        <option value="Radiator Hose">
+                                        <option value="Fan Belt">
+                                        <option value="Timing Belt">
+                                        <option value="Water Pump">
+                                        <option value="Thermostat">
+                                        <option value="Brake Pad">
+                                        <option value="Brake Shoe">
+                                        <option value="Brake Disc">
+                                        <option value="Brake Drum">
+                                        <option value="Brake Caliper">
+                                        <option value="Master Cylinder">
+                                        <option value="Tire">
+                                        <option value="Tube">
+                                        <option value="Wheel Rim">
+                                        <option value="Wheel Bearing">
+                                        <option value="Shock Absorber">
+                                        <option value="Strut">
+                                        <option value="Spring">
+                                        <option value="Ball Joint">
+                                        <option value="Tie Rod">
+                                        <option value="Control Arm">
+                                        <option value="Bushing">
+                                        <option value="Headlight">
+                                        <option value="Taillight">
+                                        <option value="Bulb">
+                                        <option value="Fuse">
+                                        <option value="Relay">
+                                        <option value="Wiper Blade">
+                                        <option value="Windshield">
+                                        <option value="Side Mirror">
+                                        <option value="Door Handle">
+                                        <option value="Window Regulator">
+                                        <option value="Door Lock">
+                                        <option value="Horn">
+                                        <option value="Speedometer">
+                                        <option value="Fuel Pump">
+                                        <option value="Injector">
+                                        <option value="Turbocharger">
+                                        <option value="Intercooler">
+                                        <option value="Exhaust Pipe">
+                                        <option value="Muffler">
+                                        <option value="Catalytic Converter">
+                                        <option value="Clutch Plate">
+                                        <option value="Clutch Disc">
+                                        <option value="Flywheel">
+                                        <option value="Gasket">
+                                        <option value="Seal">
+                                        <option value="O-Ring">
+                                        <option value="Bolt">
+                                        <option value="Nut">
+                                        <option value="Washer">
+                                        <option value="Grease">
+                                        <option value="Lubricant">
+                                        <option value="Seat">
+                                        <option value="Seat Belt">
+                                        <option value="Dashboard">
+                                        <option value="Steering Wheel">
+                                        <option value="Steering Column">
+                                        <option value="Gear Shift">
+                                        <option value="Handbrake">
+                                        <option value="Pedal">
+                                        <option value="Floor Mat">
+                                        <option value="Mirror">
+                                        <option value="Sun Visor">
+                                        <option value="AC Compressor">
+                                        <option value="AC Condenser">
+                                        <option value="AC Evaporator">
+                                        <option value="Refrigerant">
+                                        <option value="Air Hose">
+                                        <option value="Electrical Wire">
+                                        <option value="Connector">
+                                        <option value="Switch">
+                                        <option value="Sensor">
+                                        <option value="Gauge">
+                                    </datalist>
                                 </div>
                                 <div class="form-group">
                                     <label for="inv-quantity">Quantity</label>
@@ -257,6 +370,31 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/supervisor.js"></script>
+
+    <!-- Transaction History Modal -->
+    <div id="transaction-history-modal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:700px;">
+            <div class="modal-header">
+                <h2>Transaction History</h2>
+                <span class="close-modal" id="close-transaction-history">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="transaction-history-loading" style="text-align:center; padding:2rem;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:2rem; color:#3498db;"></i>
+                    <p style="margin-top:1rem; color:#7f8c8d;">Loading history...</p>
+                </div>
+                <div id="transaction-history-content" style="display:none;">
+                    <div id="transaction-history-list" style="max-height:400px; overflow-y:auto;">
+                        <!-- Transaction items will be populated here -->
+                    </div>
+                </div>
+                <div id="transaction-history-empty" style="display:none; text-align:center; padding:2rem; color:#7f8c8d;">
+                    <i class="fas fa-history" style="font-size:3rem; margin-bottom:1rem; opacity:0.5;"></i>
+                    <p>No transaction history found for this item.</p>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Confirm Modal -->
     <div id="confirm-modal" class="modal" style="display:none;">
